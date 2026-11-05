@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { format } from 'date-fns';
-import { Pencil, Power, UserPlus, Users } from 'lucide-react';
+import { KeyRound, Pencil, Power, UserPlus, Users } from 'lucide-react';
 import { errorMessage } from '../api/client';
 import { ROLE_LABELS, User } from '../api/types';
 import {
@@ -17,8 +17,10 @@ import { Button } from '../components/ui/Button';
 import { ConfirmDialog } from '../components/ui/ConfirmDialog';
 import { EmptyState } from '../components/ui/EmptyState';
 import { PageHeader } from '../components/ui/PageHeader';
+import { Pagination } from '../components/ui/Pagination';
 import { AddUserModal } from '../components/users/AddUserModal';
 import { EditUserModal } from '../components/users/EditUserModal';
+import { ResetPasswordModal } from '../components/users/ResetPasswordModal';
 import { useAuth, useSession } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { PERMISSIONS } from '../lib/permissions';
@@ -34,6 +36,7 @@ export const UsersView: React.FC = () => {
 
   const [isAdding, setIsAdding] = useState(false);
   const [editing, setEditing] = useState<User | null>(null);
+  const [resetTarget, setResetTarget] = useState<User | null>(null);
   const [statusTarget, setStatusTarget] = useState<User | null>(null);
   const [isChangingStatus, setIsChangingStatus] = useState(false);
 
@@ -41,6 +44,7 @@ export const UsersView: React.FC = () => {
   const canUpdate = hasPermission(PERMISSIONS.USERS_UPDATE);
   const canDeactivate = hasPermission(PERMISSIONS.USERS_DEACTIVATE);
   const canAssignSuperAdmin = hasPermission(PERMISSIONS.USERS_ASSIGN_SUPER_ADMIN);
+  const canResetPassword = hasPermission(PERMISSIONS.USERS_RESET_PASSWORD);
 
   const canManage = (user: User) => user.role !== 'SUPER_ADMIN' || canAssignSuperAdmin;
 
@@ -168,6 +172,17 @@ export const UsersView: React.FC = () => {
                                 <span className="hidden sm:inline">Edit</span>
                               </Button>
                             )}
+                            {canResetPassword && !isSelf && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => setResetTarget(user)}
+                                aria-label={`Reset password for ${user.fullName}`}
+                                leftIcon={<KeyRound className="w-4 h-4" aria-hidden="true" />}
+                              >
+                                <span className="hidden sm:inline">Reset password</span>
+                              </Button>
+                            )}
                             {canDeactivate && canManage(user) && !isSelf && (
                               <Button
                                 variant="ghost"
@@ -190,26 +205,7 @@ export const UsersView: React.FC = () => {
               </table>
             </div>
 
-            {total > USERS_PAGE_SIZE && (
-              <div className="px-5 py-3 border-t border-slate-200 flex items-center justify-between text-sm text-slate-600">
-                <span>
-                  Page {page} of {Math.ceil(total / USERS_PAGE_SIZE)}
-                </span>
-                <div className="flex gap-2">
-                  <Button variant="outline" size="sm" disabled={page === 1} onClick={() => setPage(page - 1)}>
-                    Previous
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={page * USERS_PAGE_SIZE >= total}
-                    onClick={() => setPage(page + 1)}
-                  >
-                    Next
-                  </Button>
-                </div>
-              </div>
-            )}
+            <Pagination page={page} pageSize={USERS_PAGE_SIZE} total={total} onChange={setPage} />
           </div>
         )}
       </AsyncState>
@@ -229,6 +225,14 @@ export const UsersView: React.FC = () => {
           canAssignSuperAdmin={canAssignSuperAdmin}
           onClose={() => setEditing(null)}
           onSaved={() => handleSaved(editing)}
+        />
+      )}
+
+      {resetTarget && (
+        <ResetPasswordModal
+          user={resetTarget}
+          onClose={() => setResetTarget(null)}
+          onReset={query.reload}
         />
       )}
 

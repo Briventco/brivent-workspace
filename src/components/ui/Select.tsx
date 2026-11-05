@@ -10,10 +10,12 @@ interface SelectProps extends React.SelectHTMLAttributes<HTMLSelectElement> {
   error?: string;
   options: SelectOption[];
   helperText?: string;
+  /** Keeps the label for screen readers where the context already shows what it is. */
+  hideLabel?: boolean;
 }
 
 export const Select = React.forwardRef<HTMLSelectElement, SelectProps>(
-  ({ label, error, options, helperText, className = '', id, ...props }, ref) => {
+  ({ label, error, options, helperText, hideLabel = false, className = '', id, ...props }, ref) => {
     const generatedId = useId();
     const selectId = id ?? generatedId;
     const hintId = `${selectId}-hint`;
@@ -21,7 +23,10 @@ export const Select = React.forwardRef<HTMLSelectElement, SelectProps>(
 
     return (
       <div className="w-full">
-        <label htmlFor={selectId} className="block text-sm font-medium text-slate-700 mb-1.5">
+        <label
+          htmlFor={selectId}
+          className={hideLabel ? 'sr-only' : 'block text-sm font-medium text-slate-700 mb-1.5'}
+        >
           {label}
         </label>
         <select

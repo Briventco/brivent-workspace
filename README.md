@@ -21,14 +21,16 @@ Brivent Workspace is the company's internal operating system for projects, tasks
 
 Everything below runs against the real backend, [brivent-workspace-backend](https://github.com/Briventco/brivent-workspace-backend).
 
-- **Sign-in** with validation and clear error messages.
-- **Forced password change**: anyone on a temporary password can't reach the app until they replace it.
-- **Sessions**: the user and their permissions load from the backend on start. A 401 clears the session and returns to login.
-- **Permissions**: routes and actions are gated on the backend's permission list, never on role names.
-- **User management** (`users.view_all`): user table, add user, edit name and role, deactivate and reactivate.
-- **Profile**: account details, change password, sign out.
+- **Sign-in** with validation and clear error messages, and a **forced password change** for anyone on a temporary password.
+- **Dashboard**: task counts, my tasks due soon, and overdue tasks. Managers also see team-wide counts.
+- **My Tasks**: my tasks with filters and inline status. Managers also get Tasks I assigned, Unassigned and All tasks.
+- **Task detail**: full details, status, edit, comments and delete.
+- **Team Directory**: search by name and filter by role.
+- **Settings**: my profile, change password, log out.
+- **User management** (`users.view_all`): user table, add user, edit name and role, deactivate, reactivate, reset password.
+- **Permissions**: routes and actions are gated on the backend's permission list, never on the viewer's role.
 
-Dashboard, daily check-in, tasks, projects, messages, calendar, documents, directory, notifications and settings are in the app as **Coming soon** pages until the backend supports them.
+Daily check-in, projects, messages, calendar and documents are in the app as **Coming soon** pages until the backend supports them.
 
 ---
 
@@ -47,6 +49,9 @@ npm run dev
 Open [http://localhost:3000](http://localhost:3000). The backend must list this origin in `CORS_ORIGIN`.
 
 `VITE_API_BASE_URL` must include the `/api` prefix, for example `http://localhost:4000/api`.
+
+### End-to-end checks
+See [e2e/README.md](e2e/README.md).
 
 ### Production Build
 ```bash

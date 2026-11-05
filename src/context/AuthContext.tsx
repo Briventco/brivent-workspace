@@ -77,9 +77,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const signOut = useCallback(() => {
+    const token = getToken();
     clearToken();
     setState({ status: 'anonymous' });
     navigate('/login', { replace: true });
+    // Signing out never waits on this. If it fails the token is already gone from this
+    // browser, and it expires by itself on the server.
+    if (token) authApi.logout(token).catch(() => {});
   }, []);
 
   const changePassword = useCallback(async (currentPassword: string, newPassword: string) => {

@@ -1,6 +1,6 @@
 import { request } from './client';
 import { BackendUser, toUser } from './mappers';
-import { Role, User } from './types';
+import { DirectoryUser, Role, User } from './types';
 
 export const USERS_PAGE_SIZE = 50;
 
@@ -53,4 +53,34 @@ export async function deactivateUser(id: string): Promise<User> {
 export async function reactivateUser(id: string): Promise<User> {
   const data = await request<{ user: BackendUser }>(`/users/${id}/reactivate`, { method: 'POST' });
   return toUser(data.user);
+}
+
+/** The temporary password is only ever available in this response. */
+export async function resetUserPassword(id: string): Promise<string> {
+  const data = await request<{ temporaryPassword: string }>(`/users/${id}/reset-password`, {
+    method: 'POST',
+  });
+  return data.temporaryPassword;
+}
+
+const DIRECTORY_PAGE_SIZE = 100;
+
+export async function searchDirectory(
+  search: string,
+  signal?: AbortSignal,
+  page = 1,
+): Promise<{ users: DirectoryUser[]; total: number }> {
+  const params = new URLSearchParams({ page: String(page), limit: String(DIRECTORY_PAGE_SIZE) });
+  if (search) params.set('search', search);
+  return request(`/users/directory?${params}`, { signal });
+}
+
+/** Every matching colleague across pages, so filtering by role can't miss anyone. */
+export async function listDirectory(search: string, signal?: AbortSignal): Promise<DirectoryUser[]> {
+  const users: DirectoryUser[] = [];
+  for (let page = 1; ; page += 1) {
+    const data = await searchDirectory(search, signal, page);
+    users.push(...data.users);
+    if (data.users.length === 0 || users.length >= data.total) return users;
+  }
 }

@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import { Check, Copy } from 'lucide-react';
 import { ApiError, errorMessage } from '../../api/client';
 import { Role, ROLES, ROLE_LABELS, User } from '../../api/types';
 import { createUser } from '../../api/users';
@@ -10,6 +9,7 @@ import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
 import { Modal } from '../ui/Modal';
 import { Select } from '../ui/Select';
+import { TemporaryPassword } from './TemporaryPassword';
 
 const ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // 32 characters, no 0/O or 1/I.
 
@@ -45,7 +45,6 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
   const [formError, setFormError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [created, setCreated] = useState<User | null>(null);
-  const [isCopied, setIsCopied] = useState(false);
 
   const roleOptions = ROLES.filter((r) => r !== 'SUPER_ADMIN' || canAssignSuperAdmin).map(
     (value) => ({ value, label: ROLE_LABELS[value] }),
@@ -89,15 +88,6 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
     }
   };
 
-  const handleCopy = async () => {
-    try {
-      await navigator.clipboard.writeText(temporaryPassword);
-      setIsCopied(true);
-    } catch {
-      toast.error("Couldn't copy it. Select the password and copy it manually.");
-    }
-  };
-
   if (created) {
     return (
       <Modal isOpen onClose={onClose} title="User added">
@@ -105,25 +95,7 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
           Send <strong>{created.fullName}</strong> this temporary password through a secure channel.
           They'll sign in with {created.email} and be asked to replace it. It won't be shown again.
         </p>
-        <div className="mt-4 flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 p-2 pl-3.5">
-          <code className="flex-1 min-w-0 break-all font-mono text-sm text-slate-900">
-            {temporaryPassword}
-          </code>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleCopy}
-            leftIcon={
-              isCopied ? (
-                <Check className="w-4 h-4" aria-hidden="true" />
-              ) : (
-                <Copy className="w-4 h-4" aria-hidden="true" />
-              )
-            }
-          >
-            {isCopied ? 'Copied' : 'Copy'}
-          </Button>
-        </div>
+        <TemporaryPassword password={temporaryPassword} />
         <div className="mt-6 flex justify-end">
           <Button onClick={onClose} data-autofocus>
             Done

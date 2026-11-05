@@ -29,9 +29,14 @@ const NAV_SECTIONS: { title: string; items: NavItem[] }[] = [
   {
     title: 'Daily work',
     items: [
-      { to: '/', label: 'Dashboard', icon: LayoutDashboard, comingSoon: true },
+      { to: '/', label: 'Dashboard', icon: LayoutDashboard },
       { to: '/daily', label: 'Daily Check-in', icon: Clock, comingSoon: true },
-      { to: '/tasks', label: 'My Tasks', icon: CheckSquare, comingSoon: true },
+      {
+        to: '/tasks',
+        label: 'My Tasks',
+        icon: CheckSquare,
+        permission: PERMISSIONS.TASKS_VIEW_OWN,
+      },
       { to: '/projects', label: 'Projects', icon: FolderKanban, comingSoon: true },
       { to: '/messages', label: 'Internal Messages', icon: MessageSquare, comingSoon: true },
       { to: '/calendar', label: 'Meetings & Schedule', icon: Calendar, comingSoon: true },
@@ -41,7 +46,12 @@ const NAV_SECTIONS: { title: string; items: NavItem[] }[] = [
     title: 'Company',
     items: [
       { to: '/docs', label: 'Knowledge & SOPs', icon: FileText, comingSoon: true },
-      { to: '/directory', label: 'Team Directory', icon: Contact, comingSoon: true },
+      {
+        to: '/directory',
+        label: 'Team Directory',
+        icon: Contact,
+        permission: PERMISSIONS.DIRECTORY_VIEW,
+      },
     ],
   },
   {
@@ -53,7 +63,7 @@ const NAV_SECTIONS: { title: string; items: NavItem[] }[] = [
         icon: ShieldCheck,
         permission: PERMISSIONS.USERS_VIEW_ALL,
       },
-      { to: '/settings', label: 'Settings', icon: Settings, comingSoon: true },
+      { to: '/settings', label: 'Settings', icon: Settings },
     ],
   },
 ];
@@ -117,7 +127,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpenMobile, onCloseMobile })
                 <h2 className="px-3 mb-2 text-xs font-semibold text-slate-400">{section.title}</h2>
                 <ul className="space-y-1">
                   {items.map(({ to, label, icon: Icon, comingSoon }) => {
-                    const isActive = pathname === to;
+                    const isActive = pathname === to || (to !== '/' && pathname.startsWith(`${to}/`));
                     return (
                       <li key={to}>
                         <Link
