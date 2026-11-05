@@ -34,3 +34,8 @@ export async function changePassword(
   setToken(data.token);
   return toSession(data.user);
 }
+
+/** Ends every session for this user, on all devices. */
+export async function logout(token: string): Promise<void> {
+  await request<null>('/auth/logout', { method: 'POST', token });
+}

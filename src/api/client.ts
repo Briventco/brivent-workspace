@@ -62,11 +62,13 @@ export function setUnauthorizedHandler(handler: (() => void) | null): void {
 }
 
 interface RequestOptions {
-  method?: 'GET' | 'POST' | 'PATCH';
+  method?: 'GET' | 'POST' | 'PATCH' | 'DELETE';
   body?: unknown;
   signal?: AbortSignal;
   /** Sends no token, and a 401 is a form error rather than an expired session. */
   anonymous?: boolean;
+  /** Sends this token rather than the stored one, for a session that is already closing. */
+  token?: string;
 }
 
 interface ErrorPayload {
@@ -93,7 +95,7 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
     throw new ApiError(0, 'CONFIG_ERROR', 'The app is missing VITE_API_BASE_URL. See .env.example.');
   }
 
-  const token = anonymous ? null : getToken();
+  const token = anonymous ? null : (options.token ?? getToken());
   const headers: Record<string, string> = {};
   if (body !== undefined) headers['Content-Type'] = 'application/json';
   if (token) headers.Authorization = `Bearer ${token}`;
