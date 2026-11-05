@@ -1,166 +1,95 @@
-import React, { useState } from 'react';
-import { WorkspaceProvider, useWorkspace } from './context/WorkspaceContext';
-import { RoleSwitcherBanner } from './components/layout/RoleSwitcherBanner';
-import { TopNavbar } from './components/layout/TopNavbar';
-import { Sidebar } from './components/layout/Sidebar';
-import { GlobalSearchModal } from './components/layout/GlobalSearchModal';
-import { TaskCreateModal } from './components/tasks/TaskCreateModal';
-import { TaskDetailDrawer } from './components/tasks/TaskDetailDrawer';
+import React, { useEffect } from 'react';
+import { errorMessage } from './api/client';
+import { Session } from './api/types';
+import { AppShell } from './components/layout/AppShell';
+import { AccessDenied, ErrorState, LoadingState } from './components/ui/AsyncState';
+import { AuthProvider, useAuth } from './context/AuthContext';
+import { ToastProvider } from './context/ToastContext';
+import { navigate, usePathname } from './lib/router';
+import { ROUTES } from './routes';
+import { ForcePasswordChangeView } from './views/ForcePasswordChangeView';
+import { LoginView } from './views/LoginView';
+import { NotFoundView } from './views/NotFoundView';
 
-// Views
-import { DashboardView } from './views/DashboardView';
-import { TasksView } from './views/TasksView';
-import { ProjectsView } from './views/ProjectsView';
-import { MessagesView } from './views/MessagesView';
-import { DocumentsView } from './views/DocumentsView';
-import { DirectoryView } from './views/DirectoryView';
-import { DailyRoutineView } from './views/DailyRoutineView';
-import { CalendarView } from './views/CalendarView';
-import { AdminView } from './views/AdminView';
-import { SettingsView } from './views/SettingsView';
-import { SignInView } from './views/SignInView';
-import { InviteAcceptanceView } from './views/InviteAcceptanceView';
+const LOGIN = '/login';
+const CHANGE_PASSWORD = '/change-password';
 
-import { workspaceService } from './services/workspaceService';
-import { Task } from './types';
-import { CheckCircle2, AlertCircle } from 'lucide-react';
+/** The page to return to after login. Only same-site paths, so a link can't send someone away. */
+function returnPath(): string {
+  const next = new URLSearchParams(window.location.search).get('next');
+  return next && /^\/(?!\/)/.test(next) ? next : '/';
+}
 
-const MainLayout: React.FC = () => {
-  const { activeTab, setActiveTab, toastMessage } = useWorkspace();
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const [isNewTaskOpen, setIsNewTaskOpen] = useState(false);
-  const [selectedTask, setSelectedTask] = useState<Task | null>(null);
+function redirectFor(session: Session | null, pathname: string): string | null {
+  if (!session) {
+    if (pathname === LOGIN) return null;
+    return pathname === '/' ? LOGIN : `${LOGIN}?next=${encodeURIComponent(pathname)}`;
+  }
+  if (session.user.mustChangePassword) {
+    return pathname === CHANGE_PASSWORD ? null : CHANGE_PASSWORD;
+  }
+  return pathname === LOGIN || pathname === CHANGE_PASSWORD ? returnPath() : null;
+}
 
-  // Authentication simulator view
-  const [authView, setAuthView] = useState<'app' | 'signin' | 'invite'>('app');
+const AuthenticatedPage: React.FC<{ session: Session; pathname: string }> = ({
+  session,
+  pathname,
+}) => {
+  const route = ROUTES[pathname];
 
-  const handleOpenTask = (taskId: string) => {
-    const task = workspaceService.getTaskById(taskId);
-    if (task) {
-      setSelectedTask(task);
-    }
-  };
+  useEffect(() => {
+    document.title = `${route?.title ?? 'Page not found'} | Brivent Workspace`;
+  }, [route]);
 
-  const handleOpenCheckIn = () => {
-    setActiveTab('daily');
-  };
+  if (!route) return <NotFoundView />;
+  if (route.permission && !session.permissions.includes(route.permission)) {
+    return <AccessDenied />;
+  }
+  return <>{route.element}</>;
+};
 
-  if (authView === 'signin') {
+const Root: React.FC = () => {
+  const { state, retry } = useAuth();
+  const pathname = usePathname();
+
+  const session = state.status === 'authenticated' ? state.session : null;
+  const isSettled = state.status === 'authenticated' || state.status === 'anonymous';
+  const redirect = isSettled ? redirectFor(session, pathname) : null;
+
+  useEffect(() => {
+    if (redirect) navigate(redirect, { replace: true });
+  }, [redirect]);
+
+  if (state.status === 'failed') {
     return (
-      <SignInView
-        onSignedIn={() => setAuthView('app')}
-        onGoToInvite={() => setAuthView('invite')}
-      />
+      <main className="min-h-screen flex items-center justify-center p-4">
+        <div className="w-full max-w-lg">
+          <ErrorState message={errorMessage(state.error)} onRetry={retry} />
+        </div>
+      </main>
     );
   }
 
-  if (authView === 'invite') {
-    return (
-      <InviteAcceptanceView
-        onAccountActivated={() => setAuthView('app')}
-        onGoToSignIn={() => setAuthView('signin')}
-      />
-    );
+  if (state.status === 'loading' || redirect) {
+    return <LoadingState label="Loading your workspace…" />;
   }
 
-  const renderActiveView = () => {
-    switch (activeTab) {
-      case 'dashboard':
-        return (
-          <DashboardView
-            onOpenTask={handleOpenTask}
-            onOpenCheckIn={handleOpenCheckIn}
-          />
-        );
-      case 'tasks':
-        return <TasksView />;
-      case 'projects':
-        return <ProjectsView />;
-      case 'messages':
-        return <MessagesView />;
-      case 'docs':
-        return <DocumentsView />;
-      case 'directory':
-        return <DirectoryView />;
-      case 'daily':
-        return <DailyRoutineView />;
-      case 'calendar':
-        return <CalendarView />;
-      case 'admin':
-        return <AdminView />;
-      case 'settings':
-        return <SettingsView />;
-      default:
-        return (
-          <DashboardView
-            onOpenTask={handleOpenTask}
-            onOpenCheckIn={handleOpenCheckIn}
-          />
-        );
-    }
-  };
+  if (!session) return <LoginView />;
+  if (session.user.mustChangePassword) return <ForcePasswordChangeView />;
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col font-sans">
-      {/* Role Switcher Demo Bar at the very top */}
-      <RoleSwitcherBanner />
-
-      <div className="flex-1 flex">
-        {/* Sidebar */}
-        <Sidebar
-          isOpenMobile={isMobileMenuOpen}
-          onCloseMobile={() => setIsMobileMenuOpen(false)}
-        />
-
-        {/* Main Content Area */}
-        <div className="flex-1 flex flex-col min-w-0 lg:pl-64">
-          <TopNavbar
-            onOpenMobileMenu={() => setIsMobileMenuOpen(true)}
-            onOpenNewTaskModal={() => setIsNewTaskOpen(true)}
-          />
-
-          <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-7xl w-full mx-auto">
-            {renderActiveView()}
-          </main>
-        </div>
-      </div>
-
-      {/* Global Modals & Drawers */}
-      <GlobalSearchModal />
-
-      <TaskCreateModal
-        isOpen={isNewTaskOpen}
-        onClose={() => setIsNewTaskOpen(false)}
-        onTaskCreated={() => {}}
-      />
-
-      <TaskDetailDrawer
-        task={selectedTask}
-        isOpen={!!selectedTask}
-        onClose={() => setSelectedTask(null)}
-        onTaskUpdated={() => {
-          if (selectedTask) {
-            setSelectedTask(workspaceService.getTaskById(selectedTask.id) || null);
-          }
-        }}
-      />
-
-      {/* Floating Toast Notification */}
-      {toastMessage && (
-        <div className="fixed bottom-6 right-6 z-50 bg-slate-900 text-white text-xs px-4 py-3 rounded-xl shadow-2xl border border-slate-700 flex items-center gap-2.5 animate-in slide-in-from-bottom duration-200">
-          <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-          <span>{toastMessage}</span>
-        </div>
-      )}
-    </div>
+    <AppShell>
+      <AuthenticatedPage session={session} pathname={pathname} />
+    </AppShell>
   );
 };
 
 export default function App() {
   return (
-    <WorkspaceProvider>
-      <MainLayout />
-    </WorkspaceProvider>
+    <ToastProvider>
+      <AuthProvider>
+        <Root />
+      </AuthProvider>
+    </ToastProvider>
   );
 }
-
