@@ -6,7 +6,7 @@ import { AccessDenied, ErrorState, LoadingState } from './components/ui/AsyncSta
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ToastProvider } from './context/ToastContext';
 import { navigate, usePathname } from './lib/router';
-import { ROUTES } from './routes';
+import { resolveRoute } from './routes';
 import { ForcePasswordChangeView } from './views/ForcePasswordChangeView';
 import { LoginView } from './views/LoginView';
 import { NotFoundView } from './views/NotFoundView';
@@ -35,11 +35,11 @@ const AuthenticatedPage: React.FC<{ session: Session; pathname: string }> = ({
   session,
   pathname,
 }) => {
-  const route = ROUTES[pathname];
+  const route = resolveRoute(pathname);
 
   useEffect(() => {
     document.title = `${route?.title ?? 'Page not found'} | Brivent Workspace`;
-  }, [route]);
+  }, [route?.title]);
 
   if (!route) return <NotFoundView />;
   if (route.permission && !session.permissions.includes(route.permission)) {
