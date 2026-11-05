@@ -17,6 +17,7 @@ import { Button } from '../components/ui/Button';
 import { ConfirmDialog } from '../components/ui/ConfirmDialog';
 import { EmptyState } from '../components/ui/EmptyState';
 import { PageHeader } from '../components/ui/PageHeader';
+import { Pagination } from '../components/ui/Pagination';
 import { AddUserModal } from '../components/users/AddUserModal';
 import { EditUserModal } from '../components/users/EditUserModal';
 import { useAuth, useSession } from '../context/AuthContext';
@@ -190,26 +191,7 @@ export const UsersView: React.FC = () => {
               </table>
             </div>
 
-            {total > USERS_PAGE_SIZE && (
-              <div className="px-5 py-3 border-t border-slate-200 flex items-center justify-between text-sm text-slate-600">
-                <span>
-                  Page {page} of {Math.ceil(total / USERS_PAGE_SIZE)}
-                </span>
-                <div className="flex gap-2">
-                  <Button variant="outline" size="sm" disabled={page === 1} onClick={() => setPage(page - 1)}>
-                    Previous
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={page * USERS_PAGE_SIZE >= total}
-                    onClick={() => setPage(page + 1)}
-                  >
-                    Next
-                  </Button>
-                </div>
-              </div>
-            )}
+            <Pagination page={page} pageSize={USERS_PAGE_SIZE} total={total} onChange={setPage} />
           </div>
         )}
       </AsyncState>
