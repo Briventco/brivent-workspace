@@ -181,7 +181,7 @@ export const TasksView: React.FC = () => {
       />
 
       {tabs.length > 1 && (
-        <div role="group" aria-label="Task views" className="mb-4 flex gap-1 overflow-x-auto">
+        <div role="group" aria-label="Task views" className="mb-4 flex flex-wrap gap-1">
           {tabs.map((tab) => (
             <button
               key={tab.view}
