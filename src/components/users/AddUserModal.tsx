@@ -136,7 +136,7 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
   return (
     <Modal
       isOpen
-      onClose={onClose}
+      onClose={isSubmitting ? () => {} : onClose}
       title="Add user"
       description="They'll be asked to replace the temporary password when they first sign in."
     >

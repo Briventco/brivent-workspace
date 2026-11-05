@@ -70,7 +70,7 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
   };
 
   return (
-    <Modal isOpen onClose={onClose} title="Edit user" description={user.email}>
+    <Modal isOpen onClose={isSubmitting ? () => {} : onClose} title="Edit user" description={user.email}>
       <form onSubmit={handleSubmit} noValidate className="space-y-4">
         {formError && <Alert>{formError}</Alert>}
         <Input

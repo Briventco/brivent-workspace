@@ -105,7 +105,7 @@ export const UsersView: React.FC = () => {
       >
         {({ users, total }) => (
           <div className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden">
-            <div className="overflow-x-auto" tabIndex={0} role="region" aria-label="Users table">
+            <div className="relative overflow-x-auto" tabIndex={0} role="region" aria-label="Users table">
               <table className="w-full text-sm">
                 <caption className="sr-only">Workspace users</caption>
                 <thead>
@@ -165,7 +165,7 @@ export const UsersView: React.FC = () => {
                                 aria-label={`Edit ${user.fullName}`}
                                 leftIcon={<Pencil className="w-4 h-4" aria-hidden="true" />}
                               >
-                                Edit
+                                <span className="hidden sm:inline">Edit</span>
                               </Button>
                             )}
                             {canDeactivate && canManage(user) && !isSelf && (
@@ -176,7 +176,9 @@ export const UsersView: React.FC = () => {
                                 aria-label={`${isActive ? 'Deactivate' : 'Reactivate'} ${user.fullName}`}
                                 leftIcon={<Power className="w-4 h-4" aria-hidden="true" />}
                               >
-                                {isActive ? 'Deactivate' : 'Reactivate'}
+                                <span className="hidden sm:inline">
+                                  {isActive ? 'Deactivate' : 'Reactivate'}
+                                </span>
                               </Button>
                             )}
                           </div>
