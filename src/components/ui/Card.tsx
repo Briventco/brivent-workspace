@@ -14,7 +14,7 @@ export const Card: React.FC<CardProps> = ({
 }) => {
   return (
     <div
-      className={`bg-white rounded-xl border border-slate-200/90 shadow-xs overflow-hidden transition-all duration-150 ${
+      className={`bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden transition-all duration-150 ${
         hoverable ? 'hover:shadow-md hover:border-slate-300' : ''
       } ${className}`}
       {...props}
@@ -31,7 +31,7 @@ export const CardHeader: React.FC<React.HTMLAttributes<HTMLDivElement>> = ({
 }) => {
   return (
     <div
-      className={`px-5 py-4 border-b border-slate-100 flex items-center justify-between ${className}`}
+      className={`px-5 py-4 border-b border-slate-200 flex items-center justify-between ${className}`}
       {...props}
     >
       {children}

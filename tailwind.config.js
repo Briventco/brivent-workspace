@@ -19,6 +19,9 @@ export default {
           950: '#172554',
         },
       },
+      boxShadow: {
+        xs: '0 1px 2px 0 rgb(15 23 42 / 0.05)',
+      },
       fontFamily: {
         sans: [
           'Inter',
