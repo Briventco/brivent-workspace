@@ -53,3 +53,8 @@ dist-ssr/
 vite.config.d.ts
 vite.config.js
 
+
+# Local environment
+.env
+.env.*
+!.env.example
