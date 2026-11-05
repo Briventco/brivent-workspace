@@ -13,8 +13,25 @@ export interface NewUser {
   fullName: string;
   email: string;
   role: Role;
-  temporaryPassword: string;
 }
+
+/** `link` only comes back when the email failed. It's a working credential: never store or log it. */
+export interface EmailedLinkResult {
+  user: User;
+  emailSent: boolean;
+  link?: string;
+}
+
+interface EmailedLinkResponse {
+  user: BackendUser;
+  emailSent: boolean;
+  link?: string;
+}
+
+const toLinkResult = ({ user, ...rest }: EmailedLinkResponse): EmailedLinkResult => ({
+  user: toUser(user),
+  ...rest,
+});
 
 export interface UserChanges {
   fullName?: string;
@@ -29,12 +46,12 @@ export async function listUsers(page: number, signal?: AbortSignal): Promise<Use
   return { users: data.users.map(toUser), total: data.total };
 }
 
-export async function createUser({ fullName, ...rest }: NewUser): Promise<User> {
-  const data = await request<{ user: BackendUser }>('/users', {
+export async function createUser({ fullName, ...rest }: NewUser): Promise<EmailedLinkResult> {
+  const data = await request<EmailedLinkResponse>('/users', {
     method: 'POST',
     body: { name: fullName, ...rest },
   });
-  return toUser(data.user);
+  return toLinkResult(data);
 }
 
 export async function updateUser(id: string, { fullName, role }: UserChanges): Promise<User> {
@@ -55,12 +72,20 @@ export async function reactivateUser(id: string): Promise<User> {
   return toUser(data.user);
 }
 
-/** The temporary password is only ever available in this response. */
-export async function resetUserPassword(id: string): Promise<string> {
-  const data = await request<{ temporaryPassword: string }>(`/users/${id}/reset-password`, {
+/** The user's old password stops working as soon as this succeeds. */
+export async function resetUserPassword(id: string): Promise<EmailedLinkResult> {
+  const data = await request<EmailedLinkResponse>(`/users/${id}/reset-password`, {
     method: 'POST',
   });
-  return data.temporaryPassword;
+  return toLinkResult(data);
+}
+
+/** Sends a pending user a new link and cancels the old one. */
+export async function resendInvite(id: string): Promise<EmailedLinkResult> {
+  const data = await request<EmailedLinkResponse>(`/users/${id}/resend-invite`, {
+    method: 'POST',
+  });
+  return toLinkResult(data);
 }
 
 const DIRECTORY_PAGE_SIZE = 100;

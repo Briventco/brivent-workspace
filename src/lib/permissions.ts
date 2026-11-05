@@ -6,6 +6,7 @@ export const PERMISSIONS = {
   USERS_DEACTIVATE: 'users.deactivate',
   USERS_ASSIGN_SUPER_ADMIN: 'users.assign_super_admin',
   USERS_RESET_PASSWORD: 'users.reset_password',
+  USERS_RESEND_INVITE: 'users.resend_invite',
   DIRECTORY_VIEW: 'directory.view',
   TASKS_CREATE: 'tasks.create',
   TASKS_VIEW_OWN: 'tasks.view_own',

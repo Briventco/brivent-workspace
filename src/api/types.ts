@@ -9,7 +9,7 @@ export const ROLES = [
 
 export type Role = (typeof ROLES)[number];
 
-export type UserStatus = 'ACTIVE' | 'DEACTIVATED';
+export type UserStatus = 'PENDING' | 'ACTIVE' | 'DEACTIVATED';
 
 export interface User {
   id: string;
