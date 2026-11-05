@@ -14,6 +14,10 @@ APP = os.environ.get("E2E_APP_URL", "http://localhost:3000").rstrip("/")
 RUN = str(int(time.time()))[-6:]
 PREFIX = f"[e2e] {RUN}"
 DESTRUCTIVE = os.environ.get("E2E_DESTRUCTIVE") == "1"
+# The backend's console output. Outside production it prints emails there instead of sending them.
+BACKEND_LOG = os.environ.get("E2E_BACKEND_LOG")
+PASSWORD = "e2e-brand-new-passphrase"
+SECOND_PASSWORD = "e2e-another-new-passphrase"
 MOBILE = {"width": 375, "height": 720}
 LAPTOP = {"width": 1366, "height": 800}
 # Pages built from this list; each must load at phone width without sideways scrolling.
@@ -63,6 +67,18 @@ def step(name, action):
         print(f"FAIL {name}\n     {str(error)[:300]}", flush=True)
 
 
+def emailed_link(address, path):
+    """The newest link printed for this address. Emails can land just after the response."""
+    pattern = re.compile(rf"https?://\S+{path}\?token=\S+")
+    for _ in range(50):
+        emails = Path(BACKEND_LOG).read_text().split("[email not sent] To: ")
+        links = [link for email in emails if email.startswith(address) for link in pattern.findall(email)]
+        if links:
+            return links[-1]
+        time.sleep(0.1)
+    raise AssertionError(f"No {path} link was printed for {address}")
+
+
 def new_page(browser, viewport=LAPTOP):
     page = browser.new_context(viewport=viewport).new_page()
 
@@ -77,7 +93,10 @@ def new_page(browser, viewport=LAPTOP):
 
 
 def log_in(page, role):
-    email, password = credentials(role)
+    log_in_as(page, *credentials(role))
+
+
+def log_in_as(page, email, password):
     page.goto(f"{APP}/login")
     page.get_by_label("Work email").fill(email)
     page.get_by_label("Password", exact=True).fill(password)
@@ -106,6 +125,26 @@ def create_task(page, title, assignee=None):
         pick_assignee(dialog, assignee)
     dialog.get_by_role("button", name="Create task").click()
     expect(page.get_by_role("heading", name=title)).to_be_visible()
+
+
+def fill_passwords(page, password, confirm=None):
+    page.get_by_label("New password", exact=True).fill(password)
+    page.get_by_label("Confirm new password").fill(confirm or password)
+
+
+def expect_url_is(page, path):
+    """The whole address, so a surviving token or a redirect both fail."""
+    expect(page).to_have_url(f"{APP}{path}")
+
+
+def invite(admin, name, email):
+    admin.goto(f"{APP}/users")
+    admin.get_by_role("button", name="Add user").click()
+    dialog = admin.get_by_role("dialog")
+    dialog.get_by_label("Full name").fill(name)
+    dialog.get_by_label("Work email").fill(email)
+    dialog.get_by_role("button", name="Send invite").click()
+    dialog.get_by_role("button", name="Done").click()
 
 
 def expect_no_sideways_scroll(page, label):
@@ -152,7 +191,10 @@ def main():
         browser = playwright.chromium.launch(executable_path=executable or None)
         page = new_page(browser)
         try:
+            run_public_pages(browser)
             run_admin(browser, page, admin_task, throwaway_task, intern_name)
+            if DESTRUCTIVE and BACKEND_LOG:
+                run_invites(browser, page)
             run_team_lead(browser, lead_task, lead_name, intern_name)
             run_intern(browser, lead_task, admin_task)
             for role in ("SUPER_ADMIN", "TEAM_LEAD", "INTERN"):
@@ -253,22 +295,277 @@ def run_admin(browser, page, title, throwaway, intern_name):
         expect(dialog.get_by_role("heading", name="Reset password?")).to_be_visible()
         dialog.get_by_role("button", name="Cancel").click()
         expect(dialog).to_have_count(0)
-        if not DESTRUCTIVE:
-            return
-        name, email = f"E2E Reset {RUN}", f"e2e.reset.{RUN}@example.test"
-        page.get_by_role("button", name="Add user").click()
-        dialog = page.get_by_role("dialog")
+    step("Super Admin: reset password confirms first", reset_dialog)
+
+
+def run_public_pages(browser):
+    page = new_page(browser, MOBILE)
+
+    def links_stay_put():
+        for path, heading in (("/set-password", "Set your password"), ("/reset-password", "Reset your password")):
+            page.goto(f"{APP}{path}?token=not-a-real-token")
+            expect(page.get_by_role("heading", name=heading)).to_be_visible()
+            expect_url_is(page, path)
+            expect_no_sideways_scroll(page, path)
+    step("Signed out: emailed links stay on their page and leave the address bar", links_stay_put)
+
+    def dead_link():
+        page.goto(f"{APP}/set-password?token=not-a-real-token")
+        fill_passwords(page, PASSWORD)
+        page.get_by_role("button", name="Set password").click()
+        expect(page.get_by_role("alert")).to_contain_text("expired or has already been used")
+        expect(page.get_by_role("alert")).to_contain_text("new invite")
+    step("Set password: a dead link explains what to do", dead_link)
+
+    def no_token():
+        page.goto(f"{APP}/reset-password")
+        expect(page.get_by_role("alert")).to_contain_text("incomplete")
+        expect_url_is(page, "/reset-password")
+    step("Reset password: without a token, says to reopen the email", no_token)
+
+    def checks_input():
+        page.goto(f"{APP}/set-password?token=not-a-real-token")
+        fill_passwords(page, "short", "short")
+        page.get_by_role("button", name="Set password").click()
+        expect(page.get_by_text("Use at least 12 characters.")).to_be_visible()
+        fill_passwords(page, PASSWORD, SECOND_PASSWORD)
+        page.get_by_role("button", name="Set password").click()
+        expect(page.get_by_text("Those passwords don't match.")).to_be_visible()
+    step("Set password: short and mismatched passwords never reach the server", checks_input)
+
+    def forgot_link():
+        page.goto(f"{APP}/login")
+        expect(page.get_by_text("Ask your administrator")).to_have_count(0)
+        page.get_by_role("link", name="Forgot password?").click()
+        expect_url_is(page, "/forgot-password")
+        expect(page.get_by_role("heading", name="Forgot password?")).to_be_visible()
+        expect_no_sideways_scroll(page, "/forgot-password")
+    step("Login: Forgot password? opens the email form", forgot_link)
+    page.context.close()
+
+
+def run_invites(browser, admin):
+    """Needs a local backend, because it reads the emails from that backend's console."""
+    name, email = f"E2E Invite {RUN}", f"e2e.invite.{RUN}@example.test"
+    fresh = new_page(browser)
+    old_link = {}
+
+    def add_user():
+        open_nav_link(admin, "User Management")
+        admin.get_by_role("button", name="Add user").click()
+        dialog = admin.get_by_role("dialog")
+        expect(dialog.get_by_label("Temporary password")).to_have_count(0)
+        expect(dialog.locator("input[type=password]")).to_have_count(0)
         dialog.get_by_label("Full name").fill(name)
         dialog.get_by_label("Work email").fill(email)
-        dialog.get_by_role("button", name="Generate a password").click()
-        dialog.get_by_role("button", name="Add user").click()
+        dialog.get_by_label("Role").select_option("INTERN")
+        dialog.get_by_role("button", name="Send invite").click()
+        expect(dialog.get_by_text(f"Invite sent to {email}")).to_be_visible()
+        expect(dialog.get_by_role("button", name="Copy")).to_have_count(0)
         dialog.get_by_role("button", name="Done").click()
-        page.get_by_role("button", name=f"Reset password for {name}").click()
-        page.get_by_role("dialog").get_by_role("button", name="Reset password").click()
-        expect(page.get_by_role("heading", name="Temporary password")).to_be_visible()
-        expect(page.get_by_role("dialog").get_by_role("button", name="Copy")).to_be_visible()
-        page.get_by_role("dialog").get_by_role("button", name="Done").click()
-    step("Super Admin: reset password confirms first", reset_dialog)
+    step("Add user: name, email, role, then Invite sent to the address", add_user)
+
+    def pending_row():
+        row = admin.get_by_role("row", name=re.compile(re.escape(name)))
+        expect(row.get_by_text("Pending", exact=True)).to_be_visible()
+        expect(row.get_by_role("button", name=f"Resend invite to {name}")).to_be_visible()
+        expect(row.get_by_role("button", name=f"Reset password for {name}")).to_have_count(0)
+        expect(row.get_by_role("button", name=f"Deactivate {name}")).to_be_visible()
+    step("User Management: pending user gets the badge and Resend invite", pending_row)
+
+    def resend():
+        old_link["url"] = emailed_link(email, "/set-password")
+        admin.get_by_role("button", name=f"Resend invite to {name}").click()
+        dialog = admin.get_by_role("dialog")
+        expect(dialog.get_by_text(f"Invite sent to {email}")).to_be_visible()
+        dialog.get_by_role("button", name="Done").click()
+    step("Resend invite: confirms the address", resend)
+
+    def old_link_dies():
+        for _ in range(50):
+            if emailed_link(email, "/set-password") != old_link["url"]:
+                break
+            time.sleep(0.1)
+        fresh.goto(old_link["url"])
+        fill_passwords(fresh, PASSWORD)
+        fresh.get_by_role("button", name="Set password").click()
+        expect(fresh.get_by_role("alert")).to_contain_text("expired or has already been used")
+    step("Resend invite: the previous link no longer works", old_link_dies)
+
+    def set_password():
+        fresh.goto(emailed_link(email, "/set-password"))
+        expect_url_is(fresh, "/set-password")
+        fill_passwords(fresh, PASSWORD)
+        fresh.get_by_role("button", name="Set password").click()
+        expect(fresh.get_by_text("Password set, please log in.")).to_be_visible()
+        expect_url_is(fresh, "/login")
+    step("Set password: real link, then Password set on the login page", set_password)
+
+    def log_in_after():
+        log_in_as(fresh, email, PASSWORD)
+        expect(fresh.get_by_text(name.split()[0]).first).to_be_visible()
+        admin.reload()
+        row = admin.get_by_role("row", name=re.compile(re.escape(name)))
+        expect(row.get_by_text("Active", exact=True)).to_be_visible()
+        expect(row.get_by_role("button", name=f"Resend invite to {name}")).to_have_count(0)
+    step("Invited user logs in with the password they chose, and shows as Active", log_in_after)
+
+    def used_link():
+        link = emailed_link(email, "/set-password")
+        page = new_page(browser)
+        page.goto(link)
+        fill_passwords(page, SECOND_PASSWORD)
+        page.get_by_role("button", name="Set password").click()
+        expect(page.get_by_role("alert")).to_contain_text("expired or has already been used")
+        page.context.close()
+    step("Set password: a used link is refused", used_link)
+
+    def signed_in_tab():
+        name2, email2 = f"E2E Tab {RUN}", f"e2e.tab.{RUN}@example.test"
+        invite(admin, name2, email2)
+        token = "sessionStorage.getItem('brivent.authToken')"
+        assert fresh.evaluate(token), "This tab should still be signed in"
+        fresh.goto(emailed_link(email2, "/set-password"))
+        expect(fresh.get_by_role("heading", name="Set your password")).to_be_visible()
+        fill_passwords(fresh, PASSWORD)
+        fresh.get_by_role("button", name="Set password").click()
+        expect(fresh.get_by_text("Password set, please log in.")).to_be_visible()
+        expect_url_is(fresh, "/login")
+        assert fresh.evaluate(token) is None
+    step("Set password: an invite opened in a signed-in tab still reaches login", signed_in_tab)
+
+    def prefills_email():
+        name3, email3 = f"E2E Fill {RUN}", f"e2e.fill.{RUN}@example.test"
+        invite(admin, name3, email3)
+        page = new_page(browser)
+
+        def add_email(route):
+            response = route.fetch()
+            route.fulfill(response=response, json={**response.json(), "email": email3})
+
+        page.route(f"{api_url()}/auth/set-password", add_email)
+        page.goto(emailed_link(email3, "/set-password"))
+        fill_passwords(page, PASSWORD)
+        page.get_by_role("button", name="Set password").click()
+        expect(page.get_by_label("Work email")).to_have_value(email3)
+        expect(page.get_by_label("Password", exact=True)).to_be_focused()
+        assert email3 not in page.url
+        page.context.close()
+    step("Login: fills the email in when the API sends one (response simulated)", prefills_email)
+
+    def forgot():
+        page = new_page(browser)
+        page.goto(f"{APP}/forgot-password")
+        page.get_by_label("Work email").fill(f"nobody.{RUN}@example.test")
+        page.get_by_role("button", name="Send reset link").click()
+        unknown = page.get_by_role("status").inner_text()
+        page.goto(f"{APP}/forgot-password")
+        page.get_by_label("Work email").fill(email)
+        page.get_by_role("button", name="Send reset link").click()
+        assert page.get_by_role("status").inner_text() == unknown, "Answer depends on the account"
+        page.goto(emailed_link(email, "/reset-password"))
+        expect_url_is(page, "/reset-password")
+        fill_passwords(page, SECOND_PASSWORD)
+        page.get_by_role("button", name="Reset password").click()
+        expect(page.get_by_text("Password reset, please log in.")).to_be_visible()
+        log_in_as(page, email, SECOND_PASSWORD)
+        page.context.close()
+    step("Forgot password: same answer for anyone, then the link resets it", forgot)
+
+    def used_reset_link():
+        page = new_page(browser)
+        page.goto(emailed_link(email, "/reset-password"))
+        fill_passwords(page, PASSWORD)
+        page.get_by_role("button", name="Reset password").click()
+        expect(page.get_by_role("alert")).to_contain_text("expired or has already been used")
+        page.get_by_role("link", name="Forgot password?").click()
+        expect_url_is(page, "/forgot-password")
+        page.context.close()
+    step("Reset password: a used link points to Forgot password?", used_reset_link)
+
+    def rate_limited():
+        page = new_page(browser)
+        address = f"e2e.limit.{RUN}@example.test"
+        limit = page.get_by_role("alert").filter(has_text="Too many requests")
+        for _ in range(11):  # The API allows 3 per email and 10 per IP address.
+            page.goto(f"{APP}/forgot-password")
+            page.get_by_label("Work email").fill(address)
+            page.get_by_role("button", name="Send reset link").click()
+            page.get_by_role("status").or_(limit).wait_for()
+            if limit.count():
+                break
+        expect(limit).to_be_visible()
+        page.context.close()
+    step("Forgot password: repeated requests show the rate limit", rate_limited)
+
+    def admin_reset():
+        admin.reload()
+        admin.get_by_role("button", name=f"Reset password for {name}").click()
+        dialog = admin.get_by_role("dialog")
+        expect(dialog.get_by_text("stop working immediately")).to_be_visible()
+        dialog.get_by_role("button", name="Reset password").click()
+        expect(dialog.get_by_text(f"A password reset email was sent to {email}")).to_be_visible()
+        expect(dialog.get_by_role("button", name="Copy")).to_have_count(0)
+        dialog.get_by_role("button", name="Done").click()
+        page = new_page(browser)
+        page.goto(f"{APP}/login")
+        page.get_by_label("Work email").fill(email)
+        page.get_by_label("Password", exact=True).fill(SECOND_PASSWORD)
+        page.get_by_role("button", name="Sign in").click()
+        expect(page.get_by_role("alert")).to_be_visible()
+        page.context.close()
+    step("Admin reset: warns, says the email was sent, old password stops", admin_reset)
+
+    def email_failures():
+        fake_link = f"{APP}/set-password?token=simulated-link"
+        admin.context.grant_permissions(["clipboard-read", "clipboard-write"], origin=APP)
+
+        def fail_email(route):
+            if route.request.method != "POST":
+                return route.fallback()
+            response = route.fetch()
+            route.fulfill(response=response, json={**response.json(), "emailSent": False, "link": fake_link})
+
+        def expect_manual_link(dialog):
+            expect(dialog.get_by_role("heading", name="Email didn't send")).to_be_visible()
+            expect(dialog.get_by_text("share this link with them yourself")).to_be_visible()
+            expect(dialog.get_by_text(fake_link)).to_be_visible()
+            dialog.get_by_role("button", name="Copy").click()
+            expect(dialog.get_by_role("button", name="Copied")).to_be_visible()
+            assert admin.evaluate("navigator.clipboard.readText()") == fake_link
+            dialog.get_by_role("button", name="Done").click()
+
+        for path in ("/users", "/users/*/resend-invite", "/users/*/reset-password"):
+            admin.route(f"{api_url()}{path}", fail_email)
+        name4, email4 = f"E2E Fail {RUN}", f"e2e.fail.{RUN}@example.test"
+        admin.get_by_role("button", name="Add user").click()
+        dialog = admin.get_by_role("dialog")
+        dialog.get_by_label("Full name").fill(name4)
+        dialog.get_by_label("Work email").fill(email4)
+        dialog.get_by_role("button", name="Send invite").click()
+        expect_manual_link(dialog)
+        admin.get_by_role("button", name=f"Resend invite to {name4}").click()
+        expect_manual_link(admin.get_by_role("dialog"))
+        admin.get_by_role("button", name=f"Reset password for {name}").click()
+        admin.get_by_role("dialog").get_by_role("button", name="Reset password").click()
+        expect_manual_link(admin.get_by_role("dialog"))
+        admin.unroute_all()
+    step("Failed email: link and copy button on add, resend and reset (failure simulated)", email_failures)
+
+    def deactivate_pending():
+        name5, email5 = f"E2E Off {RUN}", f"e2e.off.{RUN}@example.test"
+        invite(admin, name5, email5)
+        admin.get_by_role("button", name=f"Deactivate {name5}").click()
+        admin.get_by_role("dialog").get_by_role("button", name="Deactivate").click()
+        row = admin.get_by_role("row", name=re.compile(re.escape(name5)))
+        expect(row.get_by_text("Deactivated", exact=True)).to_be_visible()
+        expect(row.get_by_role("button", name=f"Resend invite to {name5}")).to_have_count(0)
+        admin.get_by_role("button", name=f"Reactivate {name5}").click()
+        admin.get_by_role("dialog").get_by_role("button", name="Reactivate").click()
+        expect(admin.get_by_text("is pending again")).to_be_visible()
+        expect(row.get_by_text("Pending", exact=True)).to_be_visible()
+    step("Pending user: deactivate, then reactivate returns them to Pending", deactivate_pending)
+    fresh.context.close()
 
 
 def run_team_lead(browser, title, lead_name, intern_name):

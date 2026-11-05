@@ -7,6 +7,7 @@ import React, {
   useRef,
   useState,
 } from 'react';
+import { flushSync } from 'react-dom';
 import * as authApi from '../api/auth';
 import { ApiError, clearToken, getToken, setUnauthorizedHandler } from '../api/client';
 import { Session } from '../api/types';
@@ -23,6 +24,8 @@ interface AuthApi {
   state: AuthState;
   signIn: (email: string, password: string) => Promise<void>;
   signOut: () => void;
+  /** Drops this browser's session only, leaving the account's other devices signed in. */
+  forgetSession: () => void;
   changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
   /** Re-reads the session, for after an edit that may have changed the logged-in user. */
   refresh: () => Promise<void>;
@@ -86,6 +89,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (token) authApi.logout(token).catch(() => {});
   }, []);
 
+  const forgetSession = useCallback(() => {
+    clearToken();
+    // Flushed so a navigation straight after it can't be redirected by the old session.
+    flushSync(() => setState({ status: 'anonymous' }));
+  }, []);
+
   const changePassword = useCallback(async (currentPassword: string, newPassword: string) => {
     const session = await authApi.changePassword(currentPassword, newPassword);
     setState({ status: 'authenticated', session });
@@ -99,8 +108,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const retry = useCallback(() => setAttempt((n) => n + 1), []);
 
   const value = useMemo(
-    () => ({ state, signIn, signOut, changePassword, refresh, retry }),
-    [state, signIn, signOut, changePassword, refresh, retry],
+    () => ({ state, signIn, signOut, forgetSession, changePassword, refresh, retry }),
+    [state, signIn, signOut, forgetSession, changePassword, refresh, retry],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

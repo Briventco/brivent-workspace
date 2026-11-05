@@ -6,7 +6,7 @@ import { AccessDenied, ErrorState, LoadingState } from './components/ui/AsyncSta
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ToastProvider } from './context/ToastContext';
 import { navigate, usePathname } from './lib/router';
-import { resolveRoute } from './routes';
+import { resolvePublicRoute, resolveRoute } from './routes';
 import { ForcePasswordChangeView } from './views/ForcePasswordChangeView';
 import { LoginView } from './views/LoginView';
 import { NotFoundView } from './views/NotFoundView';
@@ -21,6 +21,7 @@ function returnPath(): string {
 }
 
 function redirectFor(session: Session | null, pathname: string): string | null {
+  if (resolvePublicRoute(pathname)) return null;
   if (!session) {
     if (pathname === LOGIN) return null;
     return pathname === '/' ? LOGIN : `${LOGIN}?next=${encodeURIComponent(pathname)}`;
@@ -31,15 +32,23 @@ function redirectFor(session: Session | null, pathname: string): string | null {
   return pathname === LOGIN || pathname === CHANGE_PASSWORD ? returnPath() : null;
 }
 
+function usePageTitle(title: string) {
+  useEffect(() => {
+    document.title = `${title} | Brivent Workspace`;
+  }, [title]);
+}
+
+const PublicPage: React.FC<{ title: string; children: React.ReactNode }> = ({ title, children }) => {
+  usePageTitle(title);
+  return <>{children}</>;
+};
+
 const AuthenticatedPage: React.FC<{ session: Session; pathname: string }> = ({
   session,
   pathname,
 }) => {
   const route = resolveRoute(pathname);
-
-  useEffect(() => {
-    document.title = `${route?.title ?? 'Page not found'} | Brivent Workspace`;
-  }, [route?.title]);
+  usePageTitle(route?.title ?? 'Page not found');
 
   if (!route) return <NotFoundView />;
   if (route.permission && !session.permissions.includes(route.permission)) {
@@ -59,6 +68,10 @@ const Root: React.FC = () => {
   useEffect(() => {
     if (redirect) navigate(redirect, { replace: true });
   }, [redirect]);
+
+  // Before any auth state: these never depend on who's signed in, or on /me succeeding.
+  const publicRoute = resolvePublicRoute(pathname);
+  if (publicRoute) return <PublicPage title={publicRoute.title}>{publicRoute.element}</PublicPage>;
 
   if (state.status === 'failed') {
     return (

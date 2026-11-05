@@ -1,12 +1,11 @@
 import React, { useState } from 'react';
 import { errorMessage } from '../../api/client';
 import { User } from '../../api/types';
-import { resetUserPassword } from '../../api/users';
-import { useToast } from '../../context/ToastContext';
+import { EmailedLinkResult, resetUserPassword } from '../../api/users';
 import { Alert } from '../ui/Alert';
 import { Button } from '../ui/Button';
 import { Modal } from '../ui/Modal';
-import { TemporaryPassword } from './TemporaryPassword';
+import { EmailResultModal } from './EmailResultModal';
 
 interface ResetPasswordModalProps {
   user: User;
@@ -19,8 +18,7 @@ export const ResetPasswordModal: React.FC<ResetPasswordModalProps> = ({
   onClose,
   onReset,
 }) => {
-  const toast = useToast();
-  const [temporaryPassword, setTemporaryPassword] = useState<string | null>(null);
+  const [result, setResult] = useState<EmailedLinkResult | null>(null);
   const [isResetting, setIsResetting] = useState(false);
   const [error, setError] = useState('');
 
@@ -28,8 +26,7 @@ export const ResetPasswordModal: React.FC<ResetPasswordModalProps> = ({
     setError('');
     setIsResetting(true);
     try {
-      setTemporaryPassword(await resetUserPassword(user.id));
-      toast.success(`${user.fullName}'s password has been reset.`);
+      setResult(await resetUserPassword(user.id));
       onReset();
     } catch (err) {
       setError(errorMessage(err));
@@ -38,20 +35,15 @@ export const ResetPasswordModal: React.FC<ResetPasswordModalProps> = ({
     }
   };
 
-  if (temporaryPassword) {
+  if (result) {
     return (
-      <Modal isOpen onClose={onClose} title="Temporary password">
-        <p className="text-sm text-slate-700">
-          Send <strong>{user.fullName}</strong> this temporary password through a secure channel.
-          They'll be asked to replace it when they sign in. It won't be shown again.
-        </p>
-        <TemporaryPassword password={temporaryPassword} />
-        <div className="mt-6 flex justify-end">
-          <Button onClick={onClose} data-autofocus>
-            Done
-          </Button>
-        </div>
-      </Modal>
+      <EmailResultModal
+        result={result}
+        sentTitle="Reset email sent"
+        sentMessage={`A password reset email was sent to ${user.email}. The link lasts 1 hour.`}
+        failedMessage={`${user.fullName}'s password has been reset, but the email to ${user.email} failed.`}
+        onClose={onClose}
+      />
     );
   }
 
@@ -63,7 +55,8 @@ export const ResetPasswordModal: React.FC<ResetPasswordModalProps> = ({
       maxWidth="sm"
     >
       <p className="text-sm text-slate-700">
-        {user.fullName} will be signed out everywhere and given a new temporary password.
+        {user.fullName}'s current password will stop working immediately and they'll be signed out
+        everywhere. We'll email them a link to choose a new one.
       </p>
       {error && (
         <div className="mt-4">

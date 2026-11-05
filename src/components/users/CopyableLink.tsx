@@ -3,22 +3,22 @@ import { Check, Copy } from 'lucide-react';
 import { useToast } from '../../context/ToastContext';
 import { Button } from '../ui/Button';
 
-export const TemporaryPassword: React.FC<{ password: string }> = ({ password }) => {
+export const CopyableLink: React.FC<{ link: string }> = ({ link }) => {
   const toast = useToast();
   const [isCopied, setIsCopied] = useState(false);
 
   const handleCopy = async () => {
     try {
-      await navigator.clipboard.writeText(password);
+      await navigator.clipboard.writeText(link);
       setIsCopied(true);
     } catch {
-      toast.error("Couldn't copy it. Select the password and copy it manually.");
+      toast.error("Couldn't copy it. Select the link and copy it manually.");
     }
   };
 
   return (
     <div className="mt-4 flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 p-2 pl-3.5">
-      <code className="flex-1 min-w-0 break-all font-mono text-sm text-slate-900">{password}</code>
+      <code className="flex-1 min-w-0 break-all font-mono text-sm text-slate-900">{link}</code>
       <Button
         variant="outline"
         size="sm"

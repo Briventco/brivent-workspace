@@ -35,6 +35,40 @@ export async function changePassword(
   return toSession(data.user);
 }
 
+interface PasswordLinkResult {
+  message: string;
+  /** Not sent by the backend yet. Once it is, the login page fills it in. */
+  email?: string;
+}
+
+/** The token from an invite email. Neither link call returns a session: sign in afterwards. */
+export function setPassword(token: string, newPassword: string): Promise<PasswordLinkResult> {
+  return request('/auth/set-password', {
+    method: 'POST',
+    body: { token, newPassword },
+    anonymous: true,
+  });
+}
+
+/** The token from a reset email. This also ends every session the account has. */
+export function resetPassword(token: string, newPassword: string): Promise<PasswordLinkResult> {
+  return request('/auth/reset-password', {
+    method: 'POST',
+    body: { token, newPassword },
+    anonymous: true,
+  });
+}
+
+/** Answers the same whether or not the account exists. */
+export async function forgotPassword(email: string): Promise<string> {
+  const data = await request<{ message: string }>('/auth/forgot-password', {
+    method: 'POST',
+    body: { email },
+    anonymous: true,
+  });
+  return data.message;
+}
+
 /** Ends every session for this user, on all devices. */
 export async function logout(token: string): Promise<void> {
   await request<null>('/auth/logout', { method: 'POST', token });

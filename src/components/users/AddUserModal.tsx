@@ -1,23 +1,14 @@
 import React, { useState } from 'react';
 import { ApiError, errorMessage } from '../../api/client';
-import { Role, ROLES, ROLE_LABELS, User } from '../../api/types';
-import { createUser } from '../../api/users';
-import { useToast } from '../../context/ToastContext';
-import { validateEmail, validateNewPassword } from '../../lib/validation';
+import { Role, ROLES, ROLE_LABELS } from '../../api/types';
+import { createUser, EmailedLinkResult } from '../../api/users';
+import { validateEmail } from '../../lib/validation';
 import { Alert } from '../ui/Alert';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
 import { Modal } from '../ui/Modal';
 import { Select } from '../ui/Select';
-import { TemporaryPassword } from './TemporaryPassword';
-
-const ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // 32 characters, no 0/O or 1/I.
-
-function generatePassword(): string {
-  const bytes = crypto.getRandomValues(new Uint8Array(16));
-  const characters = Array.from(bytes, (byte) => ALPHABET[byte & 31]).join('');
-  return characters.match(/.{4}/g)!.join('-');
-}
+import { EmailResultModal } from './EmailResultModal';
 
 interface AddUserModalProps {
   canAssignSuperAdmin: boolean;
@@ -28,7 +19,6 @@ interface AddUserModalProps {
 interface FieldErrors {
   fullName?: string;
   email?: string;
-  temporaryPassword?: string;
 }
 
 export const AddUserModal: React.FC<AddUserModalProps> = ({
@@ -36,15 +26,13 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
   onClose,
   onCreated,
 }) => {
-  const toast = useToast();
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [role, setRole] = useState<Role>('TEAM_MEMBER');
-  const [temporaryPassword, setTemporaryPassword] = useState('');
   const [errors, setErrors] = useState<FieldErrors>({});
   const [formError, setFormError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [created, setCreated] = useState<User | null>(null);
+  const [result, setResult] = useState<EmailedLinkResult | null>(null);
 
   const roleOptions = ROLES.filter((r) => r !== 'SUPER_ADMIN' || canAssignSuperAdmin).map(
     (value) => ({ value, label: ROLE_LABELS[value] }),
@@ -57,29 +45,21 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
     const nextErrors: FieldErrors = {
       fullName: fullName.trim() ? undefined : 'Enter their full name.',
       email: validateEmail(email),
-      temporaryPassword: validateNewPassword(temporaryPassword),
     };
     setErrors(nextErrors);
     if (Object.values(nextErrors).some(Boolean)) return;
 
     setIsSubmitting(true);
     try {
-      const user = await createUser({
-        fullName: fullName.trim(),
-        email: email.trim(),
-        role,
-        temporaryPassword,
-      });
-      setCreated(user);
-      toast.success(`${user.fullName} has been added.`);
+      setResult(await createUser({ fullName: fullName.trim(), email: email.trim(), role }));
       onCreated();
     } catch (error) {
       if (error instanceof ApiError && error.code === 'EMAIL_ALREADY_EXISTS') {
         setErrors({ email: error.message });
       } else if (error instanceof ApiError && Object.keys(error.fieldErrors).length > 0) {
-        const { name, email: emailError, temporaryPassword: passwordError } = error.fieldErrors;
-        setErrors({ fullName: name, email: emailError, temporaryPassword: passwordError });
-        if (!name && !emailError && !passwordError) setFormError(error.message);
+        const { name, email: emailError } = error.fieldErrors;
+        setErrors({ fullName: name, email: emailError });
+        if (!name && !emailError) setFormError(error.message);
       } else {
         setFormError(errorMessage(error));
       }
@@ -88,20 +68,15 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
     }
   };
 
-  if (created) {
+  if (result) {
     return (
-      <Modal isOpen onClose={onClose} title="User added">
-        <p className="text-sm text-slate-700">
-          Send <strong>{created.fullName}</strong> this temporary password through a secure channel.
-          They'll sign in with {created.email} and be asked to replace it. It won't be shown again.
-        </p>
-        <TemporaryPassword password={temporaryPassword} />
-        <div className="mt-6 flex justify-end">
-          <Button onClick={onClose} data-autofocus>
-            Done
-          </Button>
-        </div>
-      </Modal>
+      <EmailResultModal
+        result={result}
+        sentTitle="Invite sent"
+        sentMessage={`Invite sent to ${result.user.email}. The link lasts 48 hours.`}
+        failedMessage={`${result.user.fullName} has been added, but the invite to ${result.user.email} failed. You can also try again with Resend invite.`}
+        onClose={onClose}
+      />
     );
   }
 
@@ -110,7 +85,7 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
       isOpen
       onClose={isSubmitting ? () => {} : onClose}
       title="Add user"
-      description="They'll be asked to replace the temporary password when they first sign in."
+      description="They'll get an email with a link to set their own password."
     >
       <form onSubmit={handleSubmit} noValidate className="space-y-4">
         {formError && <Alert>{formError}</Alert>}
@@ -136,31 +111,12 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
           onChange={(e) => setRole(e.target.value as Role)}
           options={roleOptions}
         />
-        <div>
-          <Input
-            label="Temporary password"
-            value={temporaryPassword}
-            onChange={(e) => setTemporaryPassword(e.target.value)}
-            error={errors.temporaryPassword}
-            helperText="At least 12 characters."
-            autoComplete="off"
-            spellCheck={false}
-            className="font-mono"
-          />
-          <button
-            type="button"
-            onClick={() => setTemporaryPassword(generatePassword())}
-            className="mt-1.5 text-sm font-medium text-brivent-700 hover:underline rounded"
-          >
-            Generate a password
-          </button>
-        </div>
         <div className="pt-2 flex justify-end gap-3">
           <Button variant="outline" onClick={onClose} disabled={isSubmitting}>
             Cancel
           </Button>
           <Button type="submit" isLoading={isSubmitting}>
-            Add user
+            Send invite
           </Button>
         </div>
       </form>

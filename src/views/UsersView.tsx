@@ -1,12 +1,14 @@
 import React, { useState } from 'react';
 import { format } from 'date-fns';
-import { KeyRound, Pencil, Power, UserPlus, Users } from 'lucide-react';
+import { KeyRound, Pencil, Power, Send, UserPlus, Users } from 'lucide-react';
 import { errorMessage } from '../api/client';
-import { ROLE_LABELS, User } from '../api/types';
+import { ROLE_LABELS, User, UserStatus } from '../api/types';
 import {
   deactivateUser,
+  EmailedLinkResult,
   listUsers,
   reactivateUser,
+  resendInvite,
   USERS_PAGE_SIZE,
   UsersPage,
 } from '../api/users';
@@ -20,11 +22,18 @@ import { PageHeader } from '../components/ui/PageHeader';
 import { Pagination } from '../components/ui/Pagination';
 import { AddUserModal } from '../components/users/AddUserModal';
 import { EditUserModal } from '../components/users/EditUserModal';
+import { EmailResultModal } from '../components/users/EmailResultModal';
 import { ResetPasswordModal } from '../components/users/ResetPasswordModal';
 import { useAuth, useSession } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { PERMISSIONS } from '../lib/permissions';
 import { useApiQuery } from '../lib/useApiQuery';
+
+const STATUS_BADGES: Record<UserStatus, { label: string; variant: 'success' | 'warning' | 'neutral' }> = {
+  PENDING: { label: 'Pending', variant: 'warning' },
+  ACTIVE: { label: 'Active', variant: 'success' },
+  DEACTIVATED: { label: 'Deactivated', variant: 'neutral' },
+};
 
 export const UsersView: React.FC = () => {
   const { refresh } = useAuth();
@@ -39,16 +48,19 @@ export const UsersView: React.FC = () => {
   const [resetTarget, setResetTarget] = useState<User | null>(null);
   const [statusTarget, setStatusTarget] = useState<User | null>(null);
   const [isChangingStatus, setIsChangingStatus] = useState(false);
+  const [resendingId, setResendingId] = useState<string | null>(null);
+  const [resendResult, setResendResult] = useState<EmailedLinkResult | null>(null);
 
   const canCreate = hasPermission(PERMISSIONS.USERS_CREATE);
   const canUpdate = hasPermission(PERMISSIONS.USERS_UPDATE);
   const canDeactivate = hasPermission(PERMISSIONS.USERS_DEACTIVATE);
   const canAssignSuperAdmin = hasPermission(PERMISSIONS.USERS_ASSIGN_SUPER_ADMIN);
   const canResetPassword = hasPermission(PERMISSIONS.USERS_RESET_PASSWORD);
+  const canResendInvite = hasPermission(PERMISSIONS.USERS_RESEND_INVITE);
 
   const canManage = (user: User) => user.role !== 'SUPER_ADMIN' || canAssignSuperAdmin;
 
-  const isDeactivating = statusTarget?.status === 'ACTIVE';
+  const isDeactivating = statusTarget?.status !== 'DEACTIVATED';
 
   const handleStatusChange = async () => {
     if (!statusTarget) return;
@@ -58,8 +70,12 @@ export const UsersView: React.FC = () => {
         await deactivateUser(statusTarget.id);
         toast.success(`${statusTarget.fullName} has been deactivated.`);
       } else {
-        await reactivateUser(statusTarget.id);
-        toast.success(`${statusTarget.fullName} has been reactivated.`);
+        const { status } = await reactivateUser(statusTarget.id);
+        toast.success(
+          status === 'PENDING'
+            ? `${statusTarget.fullName} is pending again. Resend their invite so they can join.`
+            : `${statusTarget.fullName} has been reactivated.`,
+        );
       }
       query.reload();
     } catch (error) {
@@ -67,6 +83,18 @@ export const UsersView: React.FC = () => {
     } finally {
       setIsChangingStatus(false);
       setStatusTarget(null);
+    }
+  };
+
+  const handleResend = async (user: User) => {
+    setResendingId(user.id);
+    try {
+      setResendResult(await resendInvite(user.id));
+    } catch (error) {
+      toast.error(errorMessage(error));
+    } finally {
+      setResendingId(null);
+      query.reload();
     }
   };
 
@@ -117,7 +145,7 @@ export const UsersView: React.FC = () => {
                     <th scope="col" className="px-5 py-3 font-medium">Name</th>
                     <th scope="col" className="px-5 py-3 font-medium">Role</th>
                     <th scope="col" className="px-5 py-3 font-medium">Status</th>
-                    <th scope="col" className="px-5 py-3 font-medium hidden md:table-cell">Added</th>
+                    <th scope="col" className="px-5 py-3 font-medium hidden 2xl:table-cell">Added</th>
                     <th scope="col" className="px-5 py-3 font-medium text-right">
                       <span className="sr-only">Actions</span>
                     </th>
@@ -127,6 +155,8 @@ export const UsersView: React.FC = () => {
                   {users.map((user) => {
                     const isSelf = user.id === currentUser.id;
                     const isActive = user.status === 'ACTIVE';
+                    const isDeactivated = user.status === 'DEACTIVATED';
+                    const badge = STATUS_BADGES[user.status];
                     return (
                       <tr key={user.id}>
                         <td className="px-5 py-3">
@@ -146,8 +176,8 @@ export const UsersView: React.FC = () => {
                         </td>
                         <td className="px-5 py-3">
                           <div className="flex flex-col items-start gap-1">
-                            <Badge variant={isActive ? 'success' : 'neutral'} size="sm" dot>
-                              {isActive ? 'Active' : 'Deactivated'}
+                            <Badge variant={badge.variant} size="sm" dot>
+                              {badge.label}
                             </Badge>
                             {isActive && user.mustChangePassword && (
                               <span className="text-xs text-slate-600 whitespace-nowrap">
@@ -156,7 +186,7 @@ export const UsersView: React.FC = () => {
                             )}
                           </div>
                         </td>
-                        <td className="px-5 py-3 text-slate-700 whitespace-nowrap hidden md:table-cell">
+                        <td className="px-5 py-3 text-slate-700 whitespace-nowrap hidden 2xl:table-cell">
                           {format(new Date(user.createdAt), 'd MMM yyyy')}
                         </td>
                         <td className="px-5 py-3">
@@ -167,20 +197,35 @@ export const UsersView: React.FC = () => {
                                 size="sm"
                                 onClick={() => setEditing(user)}
                                 aria-label={`Edit ${user.fullName}`}
+                                title={`Edit ${user.fullName}`}
                                 leftIcon={<Pencil className="w-4 h-4" aria-hidden="true" />}
                               >
-                                <span className="hidden sm:inline">Edit</span>
+                                <span className="hidden xl:inline whitespace-nowrap">Edit</span>
                               </Button>
                             )}
-                            {canResetPassword && !isSelf && (
+                            {canResendInvite && user.status === 'PENDING' && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleResend(user)}
+                                isLoading={resendingId === user.id}
+                                aria-label={`Resend invite to ${user.fullName}`}
+                                title={`Resend invite to ${user.fullName}`}
+                                leftIcon={<Send className="w-4 h-4" aria-hidden="true" />}
+                              >
+                                <span className="hidden xl:inline whitespace-nowrap">Resend invite</span>
+                              </Button>
+                            )}
+                            {canResetPassword && !isSelf && isActive && (
                               <Button
                                 variant="ghost"
                                 size="sm"
                                 onClick={() => setResetTarget(user)}
                                 aria-label={`Reset password for ${user.fullName}`}
+                                title={`Reset password for ${user.fullName}`}
                                 leftIcon={<KeyRound className="w-4 h-4" aria-hidden="true" />}
                               >
-                                <span className="hidden sm:inline">Reset password</span>
+                                <span className="hidden xl:inline whitespace-nowrap">Reset password</span>
                               </Button>
                             )}
                             {canDeactivate && canManage(user) && !isSelf && (
@@ -188,11 +233,12 @@ export const UsersView: React.FC = () => {
                                 variant="ghost"
                                 size="sm"
                                 onClick={() => setStatusTarget(user)}
-                                aria-label={`${isActive ? 'Deactivate' : 'Reactivate'} ${user.fullName}`}
+                                aria-label={`${isDeactivated ? 'Reactivate' : 'Deactivate'} ${user.fullName}`}
+                                title={`${isDeactivated ? 'Reactivate' : 'Deactivate'} ${user.fullName}`}
                                 leftIcon={<Power className="w-4 h-4" aria-hidden="true" />}
                               >
-                                <span className="hidden sm:inline">
-                                  {isActive ? 'Deactivate' : 'Reactivate'}
+                                <span className="hidden xl:inline whitespace-nowrap">
+                                  {isDeactivated ? 'Reactivate' : 'Deactivate'}
                                 </span>
                               </Button>
                             )}
@@ -236,13 +282,23 @@ export const UsersView: React.FC = () => {
         />
       )}
 
+      {resendResult && (
+        <EmailResultModal
+          result={resendResult}
+          sentTitle="Invite sent"
+          sentMessage={`Invite sent to ${resendResult.user.email}. The link lasts 48 hours.`}
+          failedMessage={`The invite to ${resendResult.user.email} failed. Their previous link no longer works.`}
+          onClose={() => setResendResult(null)}
+        />
+      )}
+
       <ConfirmDialog
         isOpen={statusTarget !== null}
         title={isDeactivating ? 'Deactivate user?' : 'Reactivate user?'}
         description={
           isDeactivating
-            ? `${statusTarget?.fullName} will be signed out immediately and won't be able to sign in.`
-            : `${statusTarget?.fullName} will be able to sign in again.`
+            ? `${statusTarget?.fullName} will be signed out immediately, any emailed link will stop working, and they won't be able to sign in.`
+            : `${statusTarget?.fullName} will be able to sign in again. If they never set a password, you'll need to resend their invite.`
         }
         confirmLabel={isDeactivating ? 'Deactivate' : 'Reactivate'}
         confirmVariant={isDeactivating ? 'danger' : 'primary'}

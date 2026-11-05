@@ -13,9 +13,12 @@ function subscribe(onChange: () => void) {
 
 export const usePathname = () => useSyncExternalStore(subscribe, () => window.location.pathname);
 
-export function navigate(to: string, { replace = false } = {}): void {
-  if (replace) window.history.replaceState(null, '', to);
-  else window.history.pushState(null, '', to);
+export function navigate(
+  to: string,
+  { replace = false, state = null }: { replace?: boolean; state?: unknown } = {},
+): void {
+  if (replace) window.history.replaceState(state, '', to);
+  else window.history.pushState(state, '', to);
   window.dispatchEvent(new Event(LOCATION_CHANGE));
 }
 

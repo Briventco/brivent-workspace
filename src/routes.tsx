@@ -5,9 +5,12 @@ import { DailyRoutineView } from './views/DailyRoutineView';
 import { DashboardView } from './views/DashboardView';
 import { DirectoryView } from './views/DirectoryView';
 import { DocumentsView } from './views/DocumentsView';
+import { ForgotPasswordView } from './views/ForgotPasswordView';
 import { MessagesView } from './views/MessagesView';
 import { NotificationsView } from './views/NotificationsView';
 import { ProjectsView } from './views/ProjectsView';
+import { ResetPasswordView } from './views/ResetPasswordView';
+import { SetPasswordView } from './views/SetPasswordView';
 import { SettingsView } from './views/SettingsView';
 import { TaskDetailView } from './views/TaskDetailView';
 import { TasksView } from './views/TasksView';
@@ -46,6 +49,17 @@ const ROUTES: Record<string, AppRoute> = {
     permission: PERMISSIONS.USERS_VIEW_ALL,
   },
 };
+
+/** Opened from an email or the login page, so they work signed out, signed in, or mid-loading. */
+const PUBLIC_ROUTES: Record<string, AppRoute> = {
+  '/set-password': { title: 'Set your password', element: <SetPasswordView /> },
+  '/reset-password': { title: 'Reset your password', element: <ResetPasswordView /> },
+  '/forgot-password': { title: 'Forgot password', element: <ForgotPasswordView /> },
+};
+
+export function resolvePublicRoute(pathname: string): AppRoute | undefined {
+  return PUBLIC_ROUTES[pathname.replace(/\/+$/, '')];
+}
 
 export function resolveRoute(pathname: string): AppRoute | undefined {
   const taskId = pathname.match(/^\/tasks\/([^/]+)$/)?.[1];
