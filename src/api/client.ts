@@ -28,9 +28,11 @@ export function errorMessage(error: unknown): string {
   return 'Something went wrong. Please try again.';
 }
 
+// sessionStorage, not localStorage: it survives a refresh but not closing the tab, which
+// limits how long an XSS bug could reach the token.
 export function getToken(): string | null {
   try {
-    return localStorage.getItem(TOKEN_KEY);
+    return sessionStorage.getItem(TOKEN_KEY);
   } catch {
     return null;
   }
@@ -38,7 +40,7 @@ export function getToken(): string | null {
 
 export function setToken(token: string): void {
   try {
-    localStorage.setItem(TOKEN_KEY, token);
+    sessionStorage.setItem(TOKEN_KEY, token);
   } catch {
     // Storage blocked: the request that needs the token fails with a 401 and returns to login.
   }
@@ -46,7 +48,7 @@ export function setToken(token: string): void {
 
 export function clearToken(): void {
   try {
-    localStorage.removeItem(TOKEN_KEY);
+    sessionStorage.removeItem(TOKEN_KEY);
   } catch {
     // Nothing stored, so nothing to clear.
   }
