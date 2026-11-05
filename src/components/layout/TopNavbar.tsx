@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Bell, ChevronDown, LogOut, Menu, UserRound } from 'lucide-react';
+import { ChevronDown, LogOut, Menu, Settings } from 'lucide-react';
 import { ROLE_LABELS } from '../../api/types';
 import { useAuth, useSession } from '../../context/AuthContext';
 import { Link, usePathname } from '../../lib/router';
@@ -60,11 +60,11 @@ const UserMenu: React.FC = () => {
             <p className="text-sm text-slate-600 truncate">{user.email}</p>
           </div>
           <Link
-            to="/profile"
+            to="/settings"
             className="flex items-center gap-2.5 px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-100 focus-visible:-outline-offset-2"
           >
-            <UserRound className="w-4 h-4" aria-hidden="true" />
-            Profile
+            <Settings className="w-4 h-4" aria-hidden="true" />
+            Settings
           </Link>
           <button
             type="button"
@@ -72,7 +72,7 @@ const UserMenu: React.FC = () => {
             className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-100 focus-visible:-outline-offset-2"
           >
             <LogOut className="w-4 h-4" aria-hidden="true" />
-            Sign out
+            Log out
           </button>
         </div>
       )}
@@ -92,13 +92,6 @@ export const TopNavbar: React.FC<{ onOpenMobileMenu: () => void }> = ({ onOpenMo
     </button>
 
     <div className="flex items-center gap-2">
-      <Link
-        to="/notifications"
-        className="p-2 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg"
-        aria-label="Notifications"
-      >
-        <Bell className="w-5 h-5" aria-hidden="true" />
-      </Link>
       <UserMenu />
     </div>
   </header>
