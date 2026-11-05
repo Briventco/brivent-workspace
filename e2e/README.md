@@ -30,6 +30,7 @@ Never commit these values.
 | `E2E_API_URL` | The value in `.env.local` | The API, used to look up names and clean up |
 | `E2E_CHROMIUM` | Playwright's own | Path to a Chromium binary |
 | `E2E_DESTRUCTIVE` | Off | Set to `1` to run steps that leave a trace |
+| `E2E_BACKEND_LOG` | Off | The backend's console output. With `E2E_DESTRUCTIVE=1`, runs the invite and password flows |
 
 ## What it changes
 
@@ -38,3 +39,14 @@ Every task it creates has a title starting `[e2e]`, and they're all deleted when
 Logging out ends every session on all devices. Each account used here is signed out everywhere, so use dedicated test accounts rather than your own.
 
 `E2E_DESTRUCTIVE=1` also adds a user and resets their password. **Users can't be deleted**, so don't use it against production.
+
+## Invite and password flows
+
+These need the emailed links, so they run against a local backend with no `RESEND_API_KEY`. Outside production it prints emails to its console instead of sending them, and no real email goes out:
+
+```bash
+npx tsx src/index.ts > /tmp/backend.log 2>&1   # in the backend repo
+E2E_DESTRUCTIVE=1 E2E_BACKEND_LOG=/tmp/backend.log npm run e2e
+```
+
+Two steps change the API's response in the browser, because neither can happen for real locally. They're marked "simulated" in the output: a failed email, and a set-password response that includes the email.
