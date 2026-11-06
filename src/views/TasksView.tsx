@@ -1,6 +1,15 @@
 import React, { useState } from 'react';
 import { errorMessage } from '../api/client';
-import { listTasks, TASKS_PAGE_SIZE, TaskView, TasksPage, updateTaskStatus } from '../api/tasks';
+import {
+  listPresetTasks,
+  listTasks,
+  TASK_PRESET_LABELS,
+  TaskPreset,
+  TASKS_PAGE_SIZE,
+  TaskView,
+  TasksPage,
+  updateTaskStatus,
+} from '../api/tasks';
 import {
   PRIORITY_LABELS,
   STATUS_LABELS,
@@ -21,6 +30,7 @@ import { Tabs } from '../components/ui/Tabs';
 import { useSession } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { Action } from '../lib/permissions';
+import { useSearch } from '../lib/router';
 import { canChangeStatus } from '../lib/tasks';
 import { useApiQuery } from '../lib/useApiQuery';
 
@@ -79,6 +89,8 @@ interface TaskResultsProps {
   status: TaskStatus | '';
   priority: TaskPriority | '';
   overdue: boolean;
+  preset: TaskPreset | null;
+  assigneeId: string | null;
   page: number;
   onPageChange: (page: number) => void;
   hasFilters: boolean;
@@ -89,6 +101,8 @@ const TaskResults: React.FC<TaskResultsProps> = ({
   status,
   priority,
   overdue,
+  preset,
+  assigneeId,
   page,
   onPageChange,
   hasFilters,
@@ -98,13 +112,20 @@ const TaskResults: React.FC<TaskResultsProps> = ({
   const [busyTaskId, setBusyTaskId] = useState<string | null>(null);
 
   const query = useApiQuery<TasksPage>(
-    (signal) =>
-      listTasks(
-        tab.view,
-        { status: status || undefined, priority: priority || undefined, overdue, page },
-        signal,
-      ),
-    [tab.view, status, priority, overdue, page],
+    async (signal) => {
+      const filters = {
+        priority: priority || undefined,
+        assigneeId: assigneeId ?? undefined,
+        overdue,
+      };
+      if (!preset) {
+        return listTasks(tab.view, { ...filters, status: status || undefined, page }, signal);
+      }
+      const tasks = await listPresetTasks(tab.view, preset, filters, signal);
+      const start = (page - 1) * TASKS_PAGE_SIZE;
+      return { tasks: tasks.slice(start, start + TASKS_PAGE_SIZE), total: tasks.length };
+    },
+    [tab.view, status, priority, overdue, preset, assigneeId, page],
   );
 
   const handleStatusChange = async (task: Task, next: TaskStatus) => {
@@ -148,14 +169,41 @@ const TaskResults: React.FC<TaskResultsProps> = ({
   );
 };
 
-export const TasksView: React.FC = () => {
+interface InitialFilters {
+  view: TaskView;
+  status: TaskStatus | '';
+  overdue: boolean;
+  preset: TaskPreset | null;
+  assigneeId: string | null;
+  assigneeName: string | null;
+}
+
+/** Numbers around the app link here with their filters in the URL. Anything unknown is ignored. */
+function parseFilters(search: string): InitialFilters {
+  const params = new URLSearchParams(search);
+  const status = params.get('status') as TaskStatus | null;
+  const preset = params.get('preset') as TaskPreset | null;
+  const view = params.get('view') as TaskView | null;
+  return {
+    view: TABS.some((tab) => tab.view === view) ? (view as TaskView) : 'mine',
+    status: status && TASK_STATUSES.includes(status) ? status : '',
+    overdue: params.get('overdue') === 'true',
+    preset: preset && preset in TASK_PRESET_LABELS ? preset : null,
+    assigneeId: params.get('assignee'),
+    assigneeName: params.get('name'),
+  };
+}
+
+const TasksScreen: React.FC<{ initial: InitialFilters }> = ({ initial }) => {
   const { can } = useSession();
 
   const tabs = TABS.filter((tab) => !tab.action || can(tab.action));
-  const [view, setView] = useState<TaskView>('mine');
-  const [status, setStatus] = useState<TaskStatus | ''>('');
+  const [view, setView] = useState<TaskView>(initial.view);
+  const [status, setStatus] = useState<TaskStatus | ''>(initial.status);
   const [priority, setPriority] = useState<TaskPriority | ''>('');
-  const [overdue, setOverdue] = useState(false);
+  const [overdue, setOverdue] = useState(initial.overdue);
+  const [preset, setPreset] = useState(initial.preset);
+  const [assigneeId, setAssigneeId] = useState(initial.assigneeId);
   const [page, setPage] = useState(1);
 
   const activeTab = tabs.find((tab) => tab.view === view) ?? tabs[0];
@@ -190,6 +238,7 @@ export const TasksView: React.FC = () => {
             options={STATUS_FILTER}
             onChange={(e) => {
               setStatus(e.target.value as TaskStatus | '');
+              setPreset(null);
               setPage(1);
             }}
           />
@@ -215,6 +264,28 @@ export const TasksView: React.FC = () => {
         >
           Overdue only
         </Chip>
+        {preset && (
+          <Chip
+            on
+            onClick={() => {
+              setPreset(null);
+              setPage(1);
+            }}
+          >
+            {TASK_PRESET_LABELS[preset]}
+          </Chip>
+        )}
+        {assigneeId && (
+          <Chip
+            on
+            onClick={() => {
+              setAssigneeId(null);
+              setPage(1);
+            }}
+          >
+            {initial.assigneeName ?? 'One person'}
+          </Chip>
+        )}
       </div>
 
       <TaskResults
@@ -223,10 +294,17 @@ export const TasksView: React.FC = () => {
         status={status}
         priority={priority}
         overdue={overdue}
+        preset={preset}
+        assigneeId={assigneeId}
         page={page}
         onPageChange={setPage}
-        hasFilters={Boolean(status || priority || overdue)}
+        hasFilters={Boolean(status || priority || overdue || preset || assigneeId)}
       />
     </>
   );
+};
+
+export const TasksView: React.FC = () => {
+  const search = useSearch();
+  return <TasksScreen key={search} initial={parseFilters(search)} />;
 };
