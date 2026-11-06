@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { CheckinAnswers, saveTodayCheckin } from '../../api/checkins';
 import { ApiError, errorMessage } from '../../api/client';
-import { Checkin, Task } from '../../api/types';
+import { Checkin, LinkedTask, Task } from '../../api/types';
 import { useSession } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
 import { clearDraft, readDraft, writeDraft } from '../../lib/checkinDraft';
@@ -13,6 +13,7 @@ import { Chip } from '../ui/Chip';
 import { Icon } from '../ui/Icon';
 import { Textarea } from '../ui/Textarea';
 import { Answer, BlockerBox, LateTag, LinkedTasks, Replies } from './CheckinParts';
+import { AssigneeStack } from '../tasks/AssigneeStack';
 
 const AUTOSAVE_MS = 3000;
 const LATE_AFTER = 11 * 60;
@@ -21,7 +22,7 @@ const MAX_LENGTH = 5000;
 const MAX_LINKED = 50;
 const SUGGESTED = 4;
 
-type ChipTask = Pick<Task, 'id' | 'title'>;
+type ChipTask = Pick<LinkedTask, 'id' | 'title' | 'assignees'>;
 
 const toAnswers = (checkin: Checkin | null): CheckinAnswers => ({
   workCompleted: checkin?.workCompleted ?? '',
@@ -235,6 +236,9 @@ export const CheckinForm: React.FC<CheckinFormProps> = ({ checkin, tasks, onSave
                     className="max-w-full"
                   >
                     <span className="truncate">{task.title}</span>
+                    {task.assignees.length > 1 && (
+                      <AssigneeStack people={task.assignees} size="xs" />
+                    )}
                   </Chip>
                 ))}
                 {hasMoreTasks && (

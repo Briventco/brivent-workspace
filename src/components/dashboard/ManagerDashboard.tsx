@@ -9,7 +9,7 @@ import { Link } from '../../lib/router';
 import { ApiQuery, useApiQuery } from '../../lib/useApiQuery';
 import { isWeekend } from '../../lib/wat';
 import { AsyncState } from '../ui/AsyncState';
-import { Avatar } from '../ui/Avatar';
+import { AssigneeStack } from '../tasks/AssigneeStack';
 import { Banner } from '../ui/Banner';
 import { PriorityBadge, StatusBadge } from '../ui/badges';
 import { Card, CardHeader, StatCard } from '../ui/Card';
@@ -78,19 +78,7 @@ const OverdueCard: React.FC<{ query: ApiQuery<Task[]> }> = ({ query }) => {
                           )}
                         </td>
                         <td>
-                          {task.assignee ? (
-                            <span className="flex items-center gap-2">
-                              <Avatar name={task.assignee.name} id={task.assignee.id} size="sm" />
-                              <span className="min-w-0">
-                                {task.assignee.name}
-                                <span className="block text-small text-text-2">
-                                  {personTitle(task.assignee)}
-                                </span>
-                              </span>
-                            </span>
-                          ) : (
-                            <span className="text-text-3">Unassigned</span>
-                          )}
+                          <AssigneeStack people={task.assignees} showDetail />
                         </td>
                         <td>
                           <PriorityBadge priority={task.priority} />
@@ -122,11 +110,13 @@ interface Workload extends PersonRef {
 function toWorkload(tasks: Task[]): Workload[] {
   const people = new Map<string, Workload>();
   for (const task of tasks) {
-    if (!task.assignee) continue;
-    const person = people.get(task.assignee.id) ?? { ...task.assignee, open: 0, overdue: 0 };
-    person.open += 1;
-    if (task.isOverdue) person.overdue += 1;
-    people.set(task.assignee.id, person);
+    // A shared task is open work for everyone on it.
+    for (const assignee of task.assignees) {
+      const person = people.get(assignee.id) ?? { ...assignee, open: 0, overdue: 0 };
+      person.open += 1;
+      if (task.isOverdue) person.overdue += 1;
+      people.set(assignee.id, person);
+    }
   }
   return [...people.values()].sort((a, b) => b.open - a.open);
 }

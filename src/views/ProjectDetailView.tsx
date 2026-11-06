@@ -24,6 +24,7 @@ import { Tabs } from '../components/ui/Tabs';
 import { useSession } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { nameAndTitle, personTitle } from '../lib/people';
+import { isAssignee } from '../lib/tasks';
 import { Link, navigate } from '../lib/router';
 import { ApiQuery, useApiQuery } from '../lib/useApiQuery';
 import { daysBetween, formatDayMonth, formatShortDate, watDayStart, weekStart } from '../lib/wat';
@@ -63,7 +64,7 @@ const TasksCard: React.FC<TasksCardProps> = ({ project, query, canCreate, onNewT
   const open = query.data?.open ?? [];
   const done = query.data?.done ?? [];
   const tasks = (tab === 'open' ? open : done).filter(
-    (task) => !assignee || task.assigneeId === assignee,
+    (task) => !assignee || isAssignee(task, assignee),
   );
   // Members can't open everyone's list on the Tasks page, so they see them all here.
   const canSeeAll = can('viewAllTasks');
@@ -146,7 +147,7 @@ const MembersCard: React.FC<{
   const [removing, setRemoving] = useState<Project['members'][number] | null>(null);
   const [isBusy, setIsBusy] = useState(false);
 
-  const openCount = (id: string) => openTasks.filter((task) => task.assigneeId === id).length;
+  const openCount = (id: string) => openTasks.filter((task) => isAssignee(task, id)).length;
 
   const add = async (id: string) => {
     setIsBusy(true);
@@ -295,7 +296,7 @@ const ProjectPage: React.FC<{ project: Project; onChanged: () => void }> = ({
   const doneThisWeek = tasks.data?.done.filter(
     (task) => task.completedAt && task.completedAt >= since,
   ).length;
-  const working = new Set(open.map((task) => task.assigneeId).filter(Boolean)).size;
+  const working = new Set(open.flatMap((task) => task.assignees.map(({ id }) => id))).size;
   const blocked = open.filter((task) => task.status === 'BLOCKED').length;
   const range = dateRange(project);
   const list = `/tasks?view=all&project=${project.id}`;

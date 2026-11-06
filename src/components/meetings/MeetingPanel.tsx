@@ -17,6 +17,7 @@ import { SidePanel } from '../ui/SidePanel';
 import { SkeletonList } from '../ui/Skeleton';
 import { SegmentedControl } from '../ui/Tabs';
 import { isCancelled, RSVP_LABELS, startOf, timeRange } from './meetingHelpers';
+import { AssigneeStack } from '../tasks/AssigneeStack';
 
 const RSVP_OPTIONS: { value: Rsvp; label: string }[] = [
   { value: 'YES', label: 'Going' },
@@ -141,9 +142,10 @@ const Details: React.FC<{
             {meeting.linkedTasks.map((task) => (
               <li key={task.id} className="flex items-center gap-2 min-w-0">
                 <StatusBadge status={task.status} />
-                <Link to={`/tasks/${task.id}`} className="truncate text-text">
+                <Link to={`/tasks/${task.id}`} className="grow min-w-0 truncate text-text">
                   {task.title}
                 </Link>
+                <AssigneeStack people={task.assignees} size="xs" />
               </li>
             ))}
           </ul>
