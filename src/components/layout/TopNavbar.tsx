@@ -1,9 +1,10 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ChevronDown, LogOut, Menu, Settings } from 'lucide-react';
+import { Icon } from '../ui/Icon';
 import { ROLE_LABELS } from '../../api/types';
 import { useAuth, useSession } from '../../context/AuthContext';
 import { Link, usePathname } from '../../lib/router';
 import { Avatar } from '../ui/Avatar';
+import { IconButton } from '../ui/Button';
 
 const UserMenu: React.FC = () => {
   const { signOut } = useAuth();
@@ -43,35 +44,35 @@ const UserMenu: React.FC = () => {
         onClick={() => setIsOpen((open) => !open)}
         aria-expanded={isOpen}
         aria-label={`Account menu for ${user.fullName}`}
-        className="flex items-center gap-2.5 rounded-lg p-1.5 hover:bg-slate-100 transition-colors"
+        className="me"
       >
-        <Avatar name={user.fullName} className="w-8 h-8 text-sm" />
+        <Avatar name={user.fullName} id={user.id} />
         <span className="hidden sm:block text-left min-w-0 max-w-[12rem]">
-          <span className="block text-sm font-medium text-slate-900 truncate">{user.fullName}</span>
-          <span className="block text-xs text-slate-600">{ROLE_LABELS[user.role]}</span>
+          <span className="block font-semibold text-text truncate">{user.fullName}</span>
+          <span className="block text-caption text-text-2">{ROLE_LABELS[user.role]}</span>
         </span>
-        <ChevronDown className="w-4 h-4 text-slate-500" aria-hidden="true" />
+        <Icon name="expand_more" size="sm" />
       </button>
 
       {isOpen && (
-        <div className="absolute right-0 mt-2 w-64 bg-white rounded-xl border border-slate-200 shadow-xl py-1 z-40">
-          <div className="px-4 py-3 border-b border-slate-200">
-            <p className="text-sm font-medium text-slate-900 truncate">{user.fullName}</p>
-            <p className="text-sm text-slate-600 truncate">{user.email}</p>
+        <div className="popover absolute right-0 mt-2 w-64 p-1.5 z-40">
+          <div className="px-3 py-2 mb-1 border-b border-border">
+            <p className="font-semibold text-text truncate">{user.fullName}</p>
+            <p className="text-small text-text-2 truncate">{user.email}</p>
           </div>
           <Link
             to="/settings"
-            className="flex items-center gap-2.5 px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-100 focus-visible:-outline-offset-2"
+            className="menu-item hover:no-underline"
           >
-            <Settings className="w-4 h-4" aria-hidden="true" />
+            <Icon name="settings" />
             Settings
           </Link>
           <button
             type="button"
             onClick={signOut}
-            className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-100 focus-visible:-outline-offset-2"
+            className="menu-item"
           >
-            <LogOut className="w-4 h-4" aria-hidden="true" />
+            <Icon name="logout" />
             Log out
           </button>
         </div>
@@ -81,15 +82,13 @@ const UserMenu: React.FC = () => {
 };
 
 export const TopNavbar: React.FC<{ onOpenMobileMenu: () => void }> = ({ onOpenMobileMenu }) => (
-  <header className="h-16 bg-white border-b border-slate-200 px-4 sm:px-6 flex items-center justify-between lg:justify-end gap-2 sticky top-0 z-30">
-    <button
-      type="button"
+  <header className="topbar justify-between lg:justify-end sticky top-0 z-30">
+    <IconButton
+      icon="menu"
+      label="Open navigation"
       onClick={onOpenMobileMenu}
-      className="p-2 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg lg:hidden"
-      aria-label="Open navigation"
-    >
-      <Menu className="w-5 h-5" aria-hidden="true" />
-    </button>
+      className="lg:hidden"
+    />
 
     <div className="flex items-center gap-2">
       <UserMenu />

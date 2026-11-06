@@ -1,6 +1,7 @@
 import React from 'react';
 import { AuthLayout } from '../components/auth/AuthLayout';
 import { PasswordChangeForm } from '../components/auth/PasswordChangeForm';
+import { Button } from '../components/ui/Button';
 import { useAuth, useSession } from '../context/AuthContext';
 
 export const ForcePasswordChangeView: React.FC = () => {
@@ -13,13 +14,9 @@ export const ForcePasswordChangeView: React.FC = () => {
       subtitle={`${user.email} is using a temporary password. Replace it to continue.`}
     >
       <PasswordChangeForm currentPasswordLabel="Temporary password" submitFullWidth />
-      <button
-        type="button"
-        onClick={signOut}
-        className="mt-4 w-full text-center text-sm font-medium text-slate-600 hover:text-slate-900 rounded"
-      >
+      <Button variant="ghost" icon="logout" block onClick={signOut} className="mt-3">
         Sign out
-      </button>
+      </Button>
     </AuthLayout>
   );
 };

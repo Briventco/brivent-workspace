@@ -2,9 +2,10 @@ import React, { useEffect } from 'react';
 import { errorMessage } from './api/client';
 import { Session } from './api/types';
 import { AppShell } from './components/layout/AppShell';
-import { AccessDenied, ErrorState, LoadingState } from './components/ui/AsyncState';
+import { ErrorState, LoadingState, NoAccess } from './components/ui/AsyncState';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ToastProvider } from './context/ToastContext';
+import { can } from './lib/permissions';
 import { navigate, usePathname } from './lib/router';
 import { resolvePublicRoute, resolveRoute } from './routes';
 import { ForcePasswordChangeView } from './views/ForcePasswordChangeView';
@@ -51,9 +52,7 @@ const AuthenticatedPage: React.FC<{ session: Session; pathname: string }> = ({
   usePageTitle(route?.title ?? 'Page not found');
 
   if (!route) return <NotFoundView />;
-  if (route.permission && !session.permissions.includes(route.permission)) {
-    return <AccessDenied />;
-  }
+  if (route.action && !can(session, route.action)) return <NoAccess />;
   return <>{route.element}</>;
 };
 

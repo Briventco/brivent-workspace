@@ -1,9 +1,8 @@
 import React from 'react';
 import { format } from 'date-fns';
-import { LogOut } from 'lucide-react';
-import { ROLE_LABELS } from '../api/types';
 import { PasswordChangeForm } from '../components/auth/PasswordChangeForm';
 import { Avatar } from '../components/ui/Avatar';
+import { RoleBadge } from '../components/ui/badges';
 import { Button } from '../components/ui/Button';
 import { Card, CardBody, CardHeader } from '../components/ui/Card';
 import { PageHeader } from '../components/ui/PageHeader';
@@ -15,8 +14,7 @@ export const SettingsView: React.FC = () => {
 
   const details = [
     { label: 'Email', value: user.email },
-    { label: 'Role', value: ROLE_LABELS[user.role] },
-    { label: 'Member since', value: format(new Date(user.createdAt), 'd MMMM yyyy') },
+        { label: 'Member since', value: format(new Date(user.createdAt), 'd MMMM yyyy') },
   ];
 
   return (
@@ -27,25 +25,27 @@ export const SettingsView: React.FC = () => {
         <div className="space-y-6">
           <Card>
             <CardHeader>
-              <h2 className="text-base font-semibold text-slate-900">My profile</h2>
+              <h2 className="t-h2">My profile</h2>
             </CardHeader>
             <CardBody>
               <div className="flex items-center gap-4">
-                <Avatar name={user.fullName} className="w-14 h-14 text-lg" />
+                <Avatar name={user.fullName} id={user.id} size="xl" />
                 <div className="min-w-0">
-                  <p className="text-lg font-semibold text-slate-900 truncate">{user.fullName}</p>
-                  <p className="text-sm text-slate-600">{ROLE_LABELS[user.role]}</p>
+                  <p className="t-h2 truncate">{user.fullName}</p>
+                  <div className="mt-1">
+                    <RoleBadge role={user.role} />
+                  </div>
                 </div>
               </div>
-              <dl className="mt-6 space-y-3 text-sm">
+              <dl className="mt-6 space-y-3">
                 {details.map(({ label, value }) => (
                   <div key={label} className="flex justify-between gap-4">
-                    <dt className="text-slate-600">{label}</dt>
-                    <dd className="font-medium text-slate-900 text-right break-all">{value}</dd>
+                    <dt className="text-text-2">{label}</dt>
+                    <dd className="font-semibold text-right break-all">{value}</dd>
                   </div>
                 ))}
               </dl>
-              <p className="mt-4 text-sm text-slate-600">
+              <p className="mt-4 text-text-2">
                 To change these details, ask your administrator.
               </p>
             </CardBody>
@@ -53,17 +53,13 @@ export const SettingsView: React.FC = () => {
 
           <Card>
             <CardHeader>
-              <h2 className="text-base font-semibold text-slate-900">Log out</h2>
+              <h2 className="t-h2">Log out</h2>
             </CardHeader>
             <CardBody>
-              <p className="text-sm text-slate-700 mb-4">
+              <p className="text-text-2 mb-4">
                 This logs you out on all your devices.
               </p>
-              <Button
-                variant="outline"
-                onClick={signOut}
-                leftIcon={<LogOut className="w-4 h-4" aria-hidden="true" />}
-              >
+              <Button variant="secondary" icon="logout" onClick={signOut}>
                 Log out
               </Button>
             </CardBody>
@@ -72,7 +68,7 @@ export const SettingsView: React.FC = () => {
 
         <Card>
           <CardHeader>
-            <h2 className="text-base font-semibold text-slate-900">Change password</h2>
+            <h2 className="t-h2">Change password</h2>
           </CardHeader>
           <CardBody>
             <PasswordChangeForm />

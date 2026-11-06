@@ -4,7 +4,6 @@ import { addComment, COMMENTS_PAGE_SIZE, listComments } from '../../api/tasks';
 import { TaskComment } from '../../api/types';
 import { useSession } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
-import { PERMISSIONS } from '../../lib/permissions';
 import { formatDateTime } from '../../lib/tasks';
 import { useApiQuery } from '../../lib/useApiQuery';
 import { AsyncState } from '../ui/AsyncState';
@@ -13,7 +12,7 @@ import { Button } from '../ui/Button';
 import { Textarea } from '../ui/Textarea';
 
 export const TaskComments: React.FC<{ taskId: string }> = ({ taskId }) => {
-  const { hasPermission } = useSession();
+  const { can } = useSession();
   const toast = useToast();
 
   const [pages, setPages] = useState(1);
@@ -48,7 +47,7 @@ export const TaskComments: React.FC<{ taskId: string }> = ({ taskId }) => {
 
   return (
     <section aria-labelledby="comments-heading" className="mt-8">
-      <h2 id="comments-heading" className="text-base font-semibold text-slate-900 mb-4">
+      <h2 id="comments-heading" className="t-h2 mb-4">
         Comments
       </h2>
 
@@ -56,22 +55,22 @@ export const TaskComments: React.FC<{ taskId: string }> = ({ taskId }) => {
         query={query}
         loadingLabel="Loading comments…"
         isEmpty={(data) => data.comments.length === 0}
-        empty={<p className="text-sm text-slate-600">No comments yet.</p>}
+        empty={<p className="text-text-2">No comments yet.</p>}
       >
         {({ comments, total }) => (
           <>
             <ul className="space-y-4">
               {comments.map((comment) => (
                 <li key={comment.id} className="flex gap-3">
-                  <Avatar name={comment.author.name} className="w-8 h-8 text-sm" />
+                  <Avatar name={comment.author.name} id={comment.author.id} />
                   <div className="min-w-0 flex-1">
-                    <p className="text-sm">
-                      <span className="font-medium text-slate-900">{comment.author.name}</span>{' '}
-                      <time dateTime={comment.createdAt} className="text-slate-600">
+                    <p>
+                      <span className="font-medium text-text">{comment.author.name}</span>{' '}
+                      <time dateTime={comment.createdAt} className="text-small text-text-3">
                         {formatDateTime(comment.createdAt)}
                       </time>
                     </p>
-                    <p className="mt-0.5 text-sm text-slate-800 whitespace-pre-wrap break-words">
+                    <p className="mt-0.5 whitespace-pre-wrap break-words">
                       {comment.body}
                     </p>
                   </div>
@@ -80,7 +79,7 @@ export const TaskComments: React.FC<{ taskId: string }> = ({ taskId }) => {
             </ul>
             {comments.length < total && pages * COMMENTS_PAGE_SIZE < total && (
               <Button
-                variant="outline"
+                variant="secondary"
                 size="sm"
                 className="mt-4"
                 onClick={() => setPages(pages + 1)}
@@ -92,7 +91,7 @@ export const TaskComments: React.FC<{ taskId: string }> = ({ taskId }) => {
         )}
       </AsyncState>
 
-      {hasPermission(PERMISSIONS.TASKS_COMMENT) && (
+      {can('commentOnTask') && (
         <form onSubmit={handleSubmit} noValidate className="mt-6 space-y-3">
           <Textarea
             label="Add a comment"

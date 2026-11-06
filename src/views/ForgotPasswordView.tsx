@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { forgotPassword } from '../api/auth';
 import { ApiError, errorMessage } from '../api/client';
 import { AuthLayout } from '../components/auth/AuthLayout';
-import { Alert } from '../components/ui/Alert';
+import { Banner } from '../components/ui/Banner';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { Link } from '../lib/router';
@@ -41,10 +41,10 @@ export const ForgotPasswordView: React.FC = () => {
     <AuthLayout title="Forgot password?" subtitle="We'll email you a link to choose a new one">
       <div className="space-y-4">
         {sentMessage ? (
-          <Alert tone="success">{sentMessage}</Alert>
+          <Banner tone="success">{sentMessage}</Banner>
         ) : (
           <form onSubmit={handleSubmit} noValidate className="space-y-4">
-            {formError && <Alert>{formError}</Alert>}
+            {formError && <Banner>{formError}</Banner>}
             <Input
               label="Work email"
               type="email"
@@ -54,13 +54,13 @@ export const ForgotPasswordView: React.FC = () => {
               onChange={(e) => setEmail(e.target.value)}
               error={emailError}
             />
-            <Button type="submit" className="w-full" isLoading={isSubmitting}>
+            <Button type="submit" block isLoading={isSubmitting}>
               Send reset link
             </Button>
           </form>
         )}
-        <p className="text-sm text-center">
-          <Link to="/login" className="font-medium text-brivent-700 hover:underline rounded">
+        <p className="text-body text-center">
+          <Link to="/login" className="font-semibold rounded">
             Back to sign in
           </Link>
         </p>

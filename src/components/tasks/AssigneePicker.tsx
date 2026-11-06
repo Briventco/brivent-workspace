@@ -1,8 +1,8 @@
 import React, { useEffect, useId, useRef, useState } from 'react';
-import { ChevronDown } from 'lucide-react';
 import { errorMessage } from '../../api/client';
 import { DirectoryUser, PersonRef, ROLE_LABELS } from '../../api/types';
 import { searchDirectory } from '../../api/users';
+import { Icon } from '../ui/Icon';
 import { useApiQuery } from '../../lib/useApiQuery';
 import { useDebouncedValue } from '../../lib/useDebouncedValue';
 
@@ -82,37 +82,38 @@ export const AssigneePicker: React.FC<AssigneePickerProps> = ({
 
   return (
     <div ref={containerRef} className="relative w-full">
-      <label htmlFor={`${id}-input`} className="block text-sm font-medium text-slate-700 mb-1.5">
-        Assignee
-      </label>
-      <div className="relative">
-        <input
-          id={`${id}-input`}
-          role="combobox"
-          aria-expanded={isOpen}
-          aria-controls={listId}
-          aria-autocomplete="list"
-          aria-activedescendant={isOpen ? optionId(activeIndex) : undefined}
-          aria-invalid={error ? true : undefined}
-          aria-describedby={describedBy}
-          autoComplete="off"
-          value={isOpen ? search : (value?.name ?? 'Unassigned')}
-          placeholder="Search by name"
-          onChange={(e) => {
-            setSearch(e.target.value);
-            setIsOpen(true);
-          }}
-          onFocus={() => setIsOpen(true)}
-          onClick={() => setIsOpen(true)}
-          onKeyDown={handleKeyDown}
-          className={`block w-full rounded-lg border bg-white text-sm pl-3.5 pr-9 py-2 ${
-            error ? 'border-rose-400 text-rose-900' : 'border-slate-300 text-slate-900'
-          }`}
-        />
-        <ChevronDown
-          className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 pointer-events-none"
-          aria-hidden="true"
-        />
+      <div className="field">
+        <label htmlFor={`${id}-input`} className="label">
+          Assignee
+        </label>
+        <div className="relative">
+          <input
+            id={`${id}-input`}
+            role="combobox"
+            aria-expanded={isOpen}
+            aria-controls={listId}
+            aria-autocomplete="list"
+            aria-activedescendant={isOpen ? optionId(activeIndex) : undefined}
+            aria-invalid={error ? true : undefined}
+            aria-describedby={describedBy}
+            autoComplete="off"
+            value={isOpen ? search : (value?.name ?? 'Unassigned')}
+            placeholder="Search by name"
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setIsOpen(true);
+            }}
+            onFocus={() => setIsOpen(true)}
+            onClick={() => setIsOpen(true)}
+            onKeyDown={handleKeyDown}
+            className={`input pr-9 ${error ? 'is-error' : ''}`}
+          />
+          <Icon
+            name="expand_more"
+            size="sm"
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-text-3 pointer-events-none"
+          />
+        </div>
       </div>
 
       {isOpen && (
@@ -120,7 +121,7 @@ export const AssigneePicker: React.FC<AssigneePickerProps> = ({
           id={listId}
           role="listbox"
           aria-label="Assignee"
-          className="absolute z-10 mt-1 w-full max-h-52 overflow-y-auto rounded-lg border border-slate-200 bg-white shadow-xl py-1"
+          className="popover absolute z-10 mt-1 w-full max-h-52 overflow-y-auto py-1"
         >
           {options.map((person, index) => (
             <li
@@ -134,34 +135,33 @@ export const AssigneePicker: React.FC<AssigneePickerProps> = ({
                 e.preventDefault();
                 choose(person);
               }}
-              className={`px-3.5 py-2 text-sm cursor-pointer ${
-                index === activeIndex ? 'bg-brivent-50' : ''
-              }`}
+              className={`px-3 py-2 cursor-pointer ${index === activeIndex ? 'bg-brand-50' : ''}`}
             >
               {person ? (
                 <>
-                  <span className="text-slate-900">{person.name}</span>
-                  <span className="block text-slate-600">{ROLE_LABELS[person.role]}</span>
+                  <span className="font-semibold">{person.name}</span>
+                  <span className="block text-small text-text-2">{ROLE_LABELS[person.role]}</span>
                 </>
               ) : (
-                <span className="text-slate-700">Unassigned</span>
+                <span>Unassigned</span>
               )}
             </li>
           ))}
           {query.error != null && (
-            <li className="px-3.5 py-2 text-sm text-rose-700">{errorMessage(query.error)}</li>
+            <li className="px-3 py-2 text-danger">{errorMessage(query.error)}</li>
           )}
           {query.data === undefined && query.error == null && (
-            <li className="px-3.5 py-2 text-sm text-slate-600">Searching…</li>
+            <li className="px-3 py-2 text-text-2">Searching…</li>
           )}
           {query.data?.users.length === 0 && debouncedSearch !== '' && (
-            <li className="px-3.5 py-2 text-sm text-slate-600">Nobody matches that name.</li>
+            <li className="px-3 py-2 text-text-2">Nobody matches that name.</li>
           )}
         </ul>
       )}
 
       {error && (
-        <p id={errorId} className="mt-1.5 text-sm text-rose-700">
+        <p id={errorId} className="err mt-1.5">
+          <Icon name="error" size="sm" />
           {error}
         </p>
       )}

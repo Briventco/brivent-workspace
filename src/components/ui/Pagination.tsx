@@ -13,16 +13,16 @@ export const Pagination: React.FC<PaginationProps> = ({ page, pageSize, total, o
   if (total <= pageSize) return null;
 
   return (
-    <div className="px-5 py-3 border-t border-slate-200 flex items-center justify-between text-sm text-slate-600">
+    <div className="card-foot flex items-center justify-between gap-2 text-text-2">
       <span>
         Page {page} of {Math.ceil(total / pageSize)}
       </span>
       <div className="flex gap-2">
-        <Button variant="outline" size="sm" disabled={page === 1} onClick={() => onChange(page - 1)}>
+        <Button variant="secondary" size="sm" disabled={page === 1} onClick={() => onChange(page - 1)}>
           Previous
         </Button>
         <Button
-          variant="outline"
+          variant="secondary"
           size="sm"
           disabled={page * pageSize >= total}
           onClick={() => onChange(page + 1)}

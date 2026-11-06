@@ -1,56 +1,44 @@
 import React, { useEffect } from 'react';
-import {
-  Calendar,
-  CheckSquare,
-  Clock,
-  Contact,
-  FileText,
-  FolderKanban,
-  LayoutDashboard,
-  LucideIcon,
-  MessageSquare,
-  Settings,
-  ShieldCheck,
-  X,
-} from 'lucide-react';
 import { useSession } from '../../context/AuthContext';
-import { PERMISSIONS } from '../../lib/permissions';
+import logo from '../../assets/brivent/logos/brivent-logo-cobalt-lavender.svg';
+import { Action } from '../../lib/permissions';
+import { Icon, IconName } from '../ui/Icon';
 import { Link, usePathname } from '../../lib/router';
 
 interface NavItem {
   to: string;
   label: string;
-  icon: LucideIcon;
+  icon: IconName;
   comingSoon?: boolean;
-  permission?: string;
+  action?: Action;
 }
 
 const NAV_SECTIONS: { title: string; items: NavItem[] }[] = [
   {
     title: 'Daily work',
     items: [
-      { to: '/', label: 'Dashboard', icon: LayoutDashboard },
-      { to: '/daily', label: 'Daily Check-in', icon: Clock, comingSoon: true },
+      { to: '/', label: 'Dashboard', icon: 'space_dashboard' },
+      { to: '/daily', label: 'Daily Check-in', icon: 'edit_note', comingSoon: true },
       {
         to: '/tasks',
         label: 'My Tasks',
-        icon: CheckSquare,
-        permission: PERMISSIONS.TASKS_VIEW_OWN,
+        icon: 'task_alt',
+        action: 'viewOwnTasks',
       },
-      { to: '/projects', label: 'Projects', icon: FolderKanban, comingSoon: true },
-      { to: '/messages', label: 'Internal Messages', icon: MessageSquare, comingSoon: true },
-      { to: '/calendar', label: 'Meetings & Schedule', icon: Calendar, comingSoon: true },
+      { to: '/projects', label: 'Projects', icon: 'folder_open', comingSoon: true },
+      { to: '/messages', label: 'Internal Messages', icon: 'forum', comingSoon: true },
+      { to: '/calendar', label: 'Meetings & Schedule', icon: 'calendar_month', comingSoon: true },
     ],
   },
   {
     title: 'Company',
     items: [
-      { to: '/docs', label: 'Knowledge & SOPs', icon: FileText, comingSoon: true },
+      { to: '/docs', label: 'Knowledge & SOPs', icon: 'menu_book', comingSoon: true },
       {
         to: '/directory',
         label: 'Team Directory',
-        icon: Contact,
-        permission: PERMISSIONS.DIRECTORY_VIEW,
+        icon: 'groups',
+        action: 'viewDirectory',
       },
     ],
   },
@@ -60,10 +48,10 @@ const NAV_SECTIONS: { title: string; items: NavItem[] }[] = [
       {
         to: '/users',
         label: 'User Management',
-        icon: ShieldCheck,
-        permission: PERMISSIONS.USERS_VIEW_ALL,
+        icon: 'manage_accounts',
+        action: 'viewUsers',
       },
-      { to: '/settings', label: 'Settings', icon: Settings },
+      { to: '/settings', label: 'Settings', icon: 'settings' },
     ],
   },
 ];
@@ -74,7 +62,7 @@ interface SidebarProps {
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({ isOpenMobile, onCloseMobile }) => {
-  const { hasPermission } = useSession();
+  const { can } = useSession();
   const pathname = usePathname();
 
   useEffect(() => {
@@ -90,7 +78,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpenMobile, onCloseMobile })
     <>
       {isOpenMobile && (
         <div
-          className="fixed inset-0 bg-slate-900/50 z-40 lg:hidden"
+          className="scrim fixed inset-0 z-40 lg:hidden"
           onClick={onCloseMobile}
           aria-hidden="true"
         />
@@ -98,35 +86,33 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpenMobile, onCloseMobile })
 
       {/* `invisible` keeps the closed off-canvas links out of the tab order. */}
       <aside
-        className={`fixed inset-y-0 left-0 w-64 bg-slate-900 text-slate-300 z-50 flex flex-col transition-transform duration-200 lg:visible lg:translate-x-0 ${
+        className={`nav fixed inset-y-0 left-0 z-50 transition-transform duration-200 lg:visible lg:translate-x-0 ${
           isOpenMobile ? 'translate-x-0' : 'invisible -translate-x-full'
         }`}
       >
-        <div className="h-16 flex items-center gap-3 px-5 border-b border-slate-800 shrink-0">
-          <img src="/logo.svg" alt="" className="w-8 h-8" />
-          <span className="flex-1 font-bold text-white tracking-tight">Brivent Workspace</span>
+        <div className="nav-brand">
+          <img src={logo} alt="Brivent" />
+          <span className="ws grow">Workspace</span>
           <button
             type="button"
             onClick={onCloseMobile}
-            className="lg:hidden p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800"
+            className="lg:hidden text-nav-text hover:text-white rounded"
             aria-label="Close navigation"
           >
-            <X className="w-5 h-5" aria-hidden="true" />
+            <Icon name="close" />
           </button>
         </div>
 
-        <nav aria-label="Main" className="flex-1 overflow-y-auto px-3 py-4 space-y-6">
+        <nav aria-label="Main" className="grow overflow-y-auto">
           {NAV_SECTIONS.map((section) => {
-            const items = section.items.filter(
-              (item) => !item.permission || hasPermission(item.permission),
-            );
+            const items = section.items.filter((item) => !item.action || can(item.action));
             if (items.length === 0) return null;
 
             return (
               <div key={section.title}>
-                <h2 className="px-3 mb-2 text-xs font-semibold text-slate-400">{section.title}</h2>
-                <ul className="space-y-1">
-                  {items.map(({ to, label, icon: Icon, comingSoon }) => {
+                <h2 className="nav-label">{section.title}</h2>
+                <ul>
+                  {items.map(({ to, label, icon, comingSoon }) => {
                     const isActive = pathname === to || (to !== '/' && pathname.startsWith(`${to}/`));
                     return (
                       <li key={to}>
@@ -134,21 +120,11 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpenMobile, onCloseMobile })
                           to={to}
                           onClick={onCloseMobile}
                           aria-current={isActive ? 'page' : undefined}
-                          className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors focus-visible:outline-brivent-400 ${
-                            isActive
-                              ? 'bg-brivent-600 text-white'
-                              : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-                          }`}
+                          className={`nav-item ${isActive ? 'on' : ''}`}
                         >
-                          <Icon className="w-4 h-4 shrink-0" aria-hidden="true" />
-                          <span className="flex-1 truncate">{label}</span>
-                          {comingSoon && (
-                            <span
-                              className={`text-xs ${isActive ? 'text-brivent-100' : 'text-slate-400'}`}
-                            >
-                              Soon
-                            </span>
-                          )}
+                          <Icon name={icon} filled={isActive} />
+                          <span className="grow truncate">{label}</span>
+                          {comingSoon && <span className="text-caption text-nav-label">Soon</span>}
                         </Link>
                       </li>
                     );

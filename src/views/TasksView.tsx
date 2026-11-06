@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import { CheckSquare, Plus } from 'lucide-react';
 import { errorMessage } from '../api/client';
 import { listTasks, TASKS_PAGE_SIZE, TaskView, TasksPage, updateTaskStatus } from '../api/tasks';
 import {
@@ -15,13 +14,15 @@ import { TaskFormModal } from '../components/tasks/TaskFormModal';
 import { TaskListView } from '../components/tasks/TaskListView';
 import { AsyncState } from '../components/ui/AsyncState';
 import { Button } from '../components/ui/Button';
+import { Chip } from '../components/ui/Chip';
 import { EmptyState } from '../components/ui/EmptyState';
 import { PageHeader } from '../components/ui/PageHeader';
 import { Pagination } from '../components/ui/Pagination';
 import { Select } from '../components/ui/Select';
+import { Tabs } from '../components/ui/Tabs';
 import { useSession } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
-import { PERMISSIONS } from '../lib/permissions';
+import { Action } from '../lib/permissions';
 import { navigate } from '../lib/router';
 import { canChangeStatus } from '../lib/tasks';
 import { useApiQuery } from '../lib/useApiQuery';
@@ -31,7 +32,7 @@ interface Tab {
   label: string;
   emptyTitle: string;
   emptyDescription: string;
-  permission?: string;
+  action?: Action;
 }
 
 const TABS: Tab[] = [
@@ -46,21 +47,21 @@ const TABS: Tab[] = [
     label: 'Tasks I assigned',
     emptyTitle: "You haven't assigned any tasks",
     emptyDescription: 'Tasks you assign to other people will appear here.',
-    permission: PERMISSIONS.TASKS_ASSIGN,
+    action: 'assignTask',
   },
   {
     view: 'unassigned',
     label: 'Unassigned',
     emptyTitle: 'Nothing unassigned',
     emptyDescription: 'Every task has an owner.',
-    permission: PERMISSIONS.TASKS_ASSIGN,
+    action: 'assignTask',
   },
   {
     view: 'all',
     label: 'All tasks',
     emptyTitle: 'No tasks yet',
     emptyDescription: 'Tasks created by the team will appear here.',
-    permission: PERMISSIONS.TASKS_VIEW_ALL,
+    action: 'viewAllTasks',
   },
 ];
 
@@ -95,7 +96,7 @@ const TaskResults: React.FC<TaskResultsProps> = ({
   onPageChange,
   hasFilters,
 }) => {
-  const { user, hasPermission } = useSession();
+  const { user, can } = useSession();
   const toast = useToast();
   const [busyTaskId, setBusyTaskId] = useState<string | null>(null);
 
@@ -129,17 +130,17 @@ const TaskResults: React.FC<TaskResultsProps> = ({
       isEmpty={(data) => data.tasks.length === 0}
       empty={
         <EmptyState
-          icon={<CheckSquare className="w-6 h-6" aria-hidden="true" />}
+          icon="task_alt"
           title={hasFilters ? 'No tasks match these filters' : tab.emptyTitle}
           description={hasFilters ? 'Try changing or clearing the filters.' : tab.emptyDescription}
         />
       }
     >
       {({ tasks, total }) => (
-        <div className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden">
+        <div className="card overflow-hidden">
           <TaskListView
             tasks={tasks}
-            canChangeStatus={(task) => canChangeStatus(task, user.id, hasPermission)}
+            canChangeStatus={(task) => canChangeStatus(task, user.id, can)}
             onStatusChange={handleStatusChange}
             busyTaskId={busyTaskId}
           />
@@ -151,9 +152,9 @@ const TaskResults: React.FC<TaskResultsProps> = ({
 };
 
 export const TasksView: React.FC = () => {
-  const { hasPermission } = useSession();
+  const { can } = useSession();
 
-  const tabs = TABS.filter((tab) => !tab.permission || hasPermission(tab.permission));
+  const tabs = TABS.filter((tab) => !tab.action || can(tab.action));
   const [view, setView] = useState<TaskView>('mine');
   const [status, setStatus] = useState<TaskStatus | ''>('');
   const [priority, setPriority] = useState<TaskPriority | ''>('');
@@ -169,11 +170,8 @@ export const TasksView: React.FC = () => {
         title="My Tasks"
         description="Everything on your plate, and what you've handed to others."
         actions={
-          hasPermission(PERMISSIONS.TASKS_CREATE) && (
-            <Button
-              onClick={() => setIsCreating(true)}
-              leftIcon={<Plus className="w-4 h-4" aria-hidden="true" />}
-            >
+          can('createTask') && (
+            <Button icon="add" onClick={() => setIsCreating(true)}>
               New task
             </Button>
           )
@@ -181,25 +179,16 @@ export const TasksView: React.FC = () => {
       />
 
       {tabs.length > 1 && (
-        <div role="group" aria-label="Task views" className="mb-4 flex flex-wrap gap-1">
-          {tabs.map((tab) => (
-            <button
-              key={tab.view}
-              type="button"
-              aria-pressed={tab.view === activeTab.view}
-              onClick={() => {
-                setView(tab.view);
-                setPage(1);
-              }}
-              className={`shrink-0 px-3.5 py-2 rounded-lg text-sm font-medium transition-colors ${
-                tab.view === activeTab.view
-                  ? 'bg-brivent-600 text-white'
-                  : 'text-slate-700 hover:bg-slate-100'
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
+        <div className="mb-4">
+          <Tabs
+            label="Task views"
+            tabs={tabs.map((tab) => ({ value: tab.view, label: tab.label }))}
+            value={activeTab.view}
+            onChange={(next) => {
+              setView(next);
+              setPage(1);
+            }}
+          />
         </div>
       )}
 
@@ -228,18 +217,15 @@ export const TasksView: React.FC = () => {
             }}
           />
         </div>
-        <label className="inline-flex items-center gap-2 text-sm text-slate-700">
-          <input
-            type="checkbox"
-            checked={overdue}
-            onChange={(e) => {
-              setOverdue(e.target.checked);
-              setPage(1);
-            }}
-            className="w-4 h-4 rounded border-slate-300"
-          />
+        <Chip
+          on={overdue}
+          onClick={() => {
+            setOverdue(!overdue);
+            setPage(1);
+          }}
+        >
           Overdue only
-        </label>
+        </Chip>
       </div>
 
       <TaskResults

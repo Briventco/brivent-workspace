@@ -21,23 +21,23 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
   }, [pathname]);
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="min-h-screen bg-bg">
       <a
         href="#main-content"
-        className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-[70] focus:bg-white focus:px-4 focus:py-2 focus:rounded-lg focus:shadow-lg text-sm font-medium text-brivent-700"
+        className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-[70] focus:bg-surface focus:px-4 focus:py-2 focus:rounded-md focus:shadow-lg font-semibold"
       >
         Skip to content
       </a>
 
       <Sidebar isOpenMobile={isMobileMenuOpen} onCloseMobile={closeMobileMenu} />
 
-      <div className="flex flex-col min-h-screen lg:pl-64">
+      <div className="flex flex-col min-h-screen lg:pl-[248px]">
         <TopNavbar onOpenMobileMenu={() => setIsMobileMenuOpen(true)} />
         <main
           id="main-content"
           ref={mainRef}
           tabIndex={-1}
-          className="flex-1 w-full max-w-7xl mx-auto p-4 sm:p-6 lg:p-8 outline-none"
+          className="grow w-full max-w-[1240px] px-4 pt-5 pb-12 md:px-8 md:pt-7"
         >
           {children}
         </main>

@@ -10,6 +10,7 @@ export const ROLES = [
 export type Role = (typeof ROLES)[number];
 
 export type UserStatus = 'PENDING' | 'ACTIVE' | 'DEACTIVATED';
+export const USER_STATUSES: UserStatus[] = ['ACTIVE', 'PENDING', 'DEACTIVATED'];
 
 export interface User {
   id: string;
@@ -42,8 +43,8 @@ export const TASK_PRIORITIES = ['LOW', 'MEDIUM', 'HIGH', 'URGENT'] as const;
 export type TaskPriority = (typeof TASK_PRIORITIES)[number];
 
 export const STATUS_LABELS: Record<TaskStatus, string> = {
-  TODO: 'To Do',
-  IN_PROGRESS: 'In Progress',
+  TODO: 'To do',
+  IN_PROGRESS: 'In progress',
   BLOCKED: 'Blocked',
   DONE: 'Done',
 };

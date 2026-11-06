@@ -1,40 +1,32 @@
 import React from 'react';
+import { Icon, IconName } from './Icon';
 import { Spinner } from './Spinner';
 
-export type ButtonVariant = 'primary' | 'secondary' | 'outline' | 'ghost' | 'danger';
+export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger' | 'danger-ghost';
 export type ButtonSize = 'sm' | 'md' | 'lg';
 
 interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: ButtonVariant;
   size?: ButtonSize;
+  icon?: IconName;
+  trailingIcon?: IconName;
+  block?: boolean;
   isLoading?: boolean;
-  leftIcon?: React.ReactNode;
-  rightIcon?: React.ReactNode;
+  /** The progress word shown while loading, such as "Sending invite". */
+  loadingLabel?: string;
 }
 
-const baseStyles =
-  'inline-flex items-center justify-center font-medium rounded-lg transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed select-none';
+const SIZE_CLASS: Record<ButtonSize, string> = { sm: 'btn-sm', md: '', lg: 'btn-lg' };
 
-const variantStyles: Record<ButtonVariant, string> = {
-  primary: 'bg-brivent-600 text-white hover:bg-brivent-700 shadow-xs',
-  secondary: 'bg-slate-800 text-white hover:bg-slate-900 shadow-xs',
-  outline: 'border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 shadow-xs',
-  ghost: 'text-slate-600 hover:bg-slate-100 hover:text-slate-900',
-  danger: 'bg-rose-600 text-white hover:bg-rose-700 shadow-xs',
-};
-
-const sizeStyles: Record<ButtonSize, string> = {
-  sm: 'text-sm px-3 py-1.5 gap-1.5',
-  md: 'text-sm px-4 py-2 gap-2',
-  lg: 'text-base px-5 py-2.5 gap-2',
-};
-
+/** Heights are 30, 36 and 44. One primary per view. */
 export const Button: React.FC<ButtonProps> = ({
   variant = 'primary',
   size = 'md',
+  icon,
+  trailingIcon,
+  block = false,
   isLoading = false,
-  leftIcon,
-  rightIcon,
+  loadingLabel,
   children,
   className = '',
   disabled,
@@ -43,13 +35,54 @@ export const Button: React.FC<ButtonProps> = ({
 }) => (
   <button
     type={type}
-    className={`${baseStyles} ${variantStyles[variant]} ${sizeStyles[size]} ${className}`}
+    className={`btn btn-${variant} ${SIZE_CLASS[size]} ${block ? 'btn-block' : ''} ${
+      isLoading ? 'is-loading' : ''
+    } ${className}`}
     disabled={disabled || isLoading}
     aria-busy={isLoading || undefined}
     {...props}
   >
-    {isLoading ? <Spinner className="w-4 h-4" /> : leftIcon}
-    {children}
-    {!isLoading && rightIcon}
+    {/* The label stays in the layout while loading, so the button keeps its width. */}
+    <span className="grid">
+      <span className={`[grid-area:1/1] inline-flex items-center justify-center gap-1.5 ${isLoading ? 'invisible' : ''}`}>
+        {icon && <Icon name={icon} />}
+        {children}
+        {trailingIcon && <Icon name={trailingIcon} />}
+      </span>
+      {isLoading && (
+        <span className="[grid-area:1/1] inline-flex items-center justify-center gap-1.5">
+          <Spinner />
+          {loadingLabel}
+        </span>
+      )}
+    </span>
+  </button>
+);
+
+interface IconButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
+  icon: IconName;
+  /** Icon-only buttons always need a name. */
+  label: string;
+  size?: 'sm' | 'md';
+  variant?: 'ghost' | 'secondary';
+}
+
+export const IconButton: React.FC<IconButtonProps> = ({
+  icon,
+  label,
+  size = 'md',
+  variant = 'ghost',
+  className = '',
+  type = 'button',
+  ...props
+}) => (
+  <button
+    type={type}
+    aria-label={label}
+    title={label}
+    className={`btn btn-icon btn-${variant} ${size === 'sm' ? 'btn-sm' : ''} ${className}`}
+    {...props}
+  >
+    <Icon name={icon} />
   </button>
 );

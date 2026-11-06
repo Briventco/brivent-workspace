@@ -1,6 +1,6 @@
 import React from 'react';
-import { Loader2 } from 'lucide-react';
+import { Icon } from './Icon';
 
-export const Spinner: React.FC<{ className?: string }> = ({ className = 'w-5 h-5' }) => (
-  <Loader2 className={`animate-spin ${className}`} aria-hidden="true" />
+export const Spinner: React.FC<{ size?: 'sm' | 'md' }> = ({ size = 'md' }) => (
+  <Icon name="progress_activity" size={size} className="spin" />
 );

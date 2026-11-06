@@ -1,5 +1,5 @@
 import React from 'react';
-import { PERMISSIONS } from './lib/permissions';
+import { Action } from './lib/permissions';
 import { CalendarView } from './views/CalendarView';
 import { DailyRoutineView } from './views/DailyRoutineView';
 import { DashboardView } from './views/DashboardView';
@@ -20,8 +20,13 @@ interface AppRoute {
   title: string;
   element: React.ReactNode;
   /** Required to see the page. Pages without one are open to anyone signed in. */
-  permission?: string;
+  action?: Action;
 }
+
+// Dynamic and behind DEV, so production builds leave the gallery out entirely.
+const DesignSystemView = import.meta.env.DEV
+  ? React.lazy(() => import('./views/DesignSystemView'))
+  : null;
 
 const ROUTES: Record<string, AppRoute> = {
   '/': { title: 'Dashboard', element: <DashboardView /> },
@@ -29,7 +34,7 @@ const ROUTES: Record<string, AppRoute> = {
   '/tasks': {
     title: 'My Tasks',
     element: <TasksView />,
-    permission: PERMISSIONS.TASKS_VIEW_OWN,
+    action: 'viewOwnTasks',
   },
   '/projects': { title: 'Projects', element: <ProjectsView /> },
   '/messages': { title: 'Internal Messages', element: <MessagesView /> },
@@ -38,7 +43,7 @@ const ROUTES: Record<string, AppRoute> = {
   '/directory': {
     title: 'Team Directory',
     element: <DirectoryView />,
-    permission: PERMISSIONS.DIRECTORY_VIEW,
+    action: 'viewDirectory',
   },
   '/notifications': { title: 'Notifications', element: <NotificationsView /> },
   '/settings': { title: 'Settings', element: <SettingsView /> },
@@ -46,7 +51,7 @@ const ROUTES: Record<string, AppRoute> = {
   '/users': {
     title: 'User Management',
     element: <UsersView />,
-    permission: PERMISSIONS.USERS_VIEW_ALL,
+    action: 'viewUsers',
   },
 };
 
@@ -55,6 +60,16 @@ const PUBLIC_ROUTES: Record<string, AppRoute> = {
   '/set-password': { title: 'Set your password', element: <SetPasswordView /> },
   '/reset-password': { title: 'Reset your password', element: <ResetPasswordView /> },
   '/forgot-password': { title: 'Forgot password', element: <ForgotPasswordView /> },
+  ...(DesignSystemView && {
+    '/design-system': {
+      title: 'Design system',
+      element: (
+        <React.Suspense fallback={null}>
+          <DesignSystemView />
+        </React.Suspense>
+      ),
+    },
+  }),
 };
 
 export function resolvePublicRoute(pathname: string): AppRoute | undefined {
@@ -67,7 +82,7 @@ export function resolveRoute(pathname: string): AppRoute | undefined {
     return {
       title: 'Task',
       element: <TaskDetailView key={taskId} taskId={taskId} />,
-      permission: PERMISSIONS.TASKS_VIEW_OWN,
+      action: 'viewOwnTasks',
     };
   }
   return ROUTES[pathname];

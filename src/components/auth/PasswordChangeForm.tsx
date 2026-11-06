@@ -3,7 +3,7 @@ import { ApiError, errorMessage } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
 import { validateNewPassword } from '../../lib/validation';
-import { Alert } from '../ui/Alert';
+import { Banner } from '../ui/Banner';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
 
@@ -72,7 +72,7 @@ export const PasswordChangeForm: React.FC<{
 
   return (
     <form onSubmit={handleSubmit} noValidate className="space-y-4">
-      {formError && <Alert>{formError}</Alert>}
+      {formError && <Banner>{formError}</Banner>}
       <Input
         label={currentPasswordLabel}
         type="password"
@@ -98,7 +98,7 @@ export const PasswordChangeForm: React.FC<{
         onChange={update('confirmPassword')}
         error={errors.confirmPassword}
       />
-      <Button type="submit" isLoading={isSubmitting} className={submitFullWidth ? 'w-full' : ''}>
+      <Button type="submit" isLoading={isSubmitting} block={submitFullWidth}>
         Change password
       </Button>
     </form>
