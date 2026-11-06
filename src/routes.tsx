@@ -9,6 +9,7 @@ import { ForgotPasswordView } from './views/ForgotPasswordView';
 import { MessagesView } from './views/MessagesView';
 import { MoreView } from './views/MoreView';
 import { NotificationsView } from './views/NotificationsView';
+import { ProjectDetailView } from './views/ProjectDetailView';
 import { ProjectsView } from './views/ProjectsView';
 import { ResetPasswordView } from './views/ResetPasswordView';
 import { SetPasswordView } from './views/SetPasswordView';
@@ -37,7 +38,7 @@ const ROUTES: Record<string, AppRoute> = {
     element: <TasksView />,
     action: 'viewOwnTasks',
   },
-  '/projects': { title: 'Projects', element: <ProjectsView /> },
+  '/projects': { title: 'Projects', element: <ProjectsView />, action: 'viewProjects' },
   '/messages': { title: 'Internal Messages', element: <MessagesView /> },
   '/calendar': { title: 'Meetings & Schedule', element: <CalendarView /> },
   '/docs': { title: 'Knowledge & SOPs', element: <DocumentsView /> },
@@ -85,6 +86,14 @@ export function resolveRoute(pathname: string): AppRoute | undefined {
       title: 'Task',
       element: <TaskDetailView key={taskId} taskId={taskId} />,
       action: 'viewOwnTasks',
+    };
+  }
+  const projectId = pathname.match(/^\/projects\/([^/]+)$/)?.[1];
+  if (projectId) {
+    return {
+      title: 'Project',
+      element: <ProjectDetailView key={projectId} projectId={projectId} />,
+      action: 'viewProjects',
     };
   }
   return ROUTES[pathname];

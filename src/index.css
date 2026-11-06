@@ -439,3 +439,22 @@
     display: none;
   }
 }
+
+/* Projects */
+.project-tile {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: var(--r-md);
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.project-tile.is-large {
+  width: 60px;
+  height: 60px;
+  border-radius: var(--r-lg);
+  font-size: 22px;
+}
