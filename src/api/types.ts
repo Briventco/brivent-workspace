@@ -69,6 +69,14 @@ export interface Named {
 
 export interface PersonRef extends Named, Placement {}
 
+/** Who gave them the task is null on assignments older than that tracking. */
+export interface TaskAssignee extends PersonRef {
+  assignedBy: Named | null;
+  assignedAt: string | null;
+}
+
+export const MAX_ASSIGNEES = 10;
+
 export interface Task {
   id: string;
   title: string;
@@ -77,13 +85,11 @@ export interface Task {
   status: TaskStatus;
   deadline: string | null;
   createdBy: string;
-  assigneeId: string | null;
   completedAt: string | null;
   isOverdue: boolean;
   creator: PersonRef;
-  assignee: PersonRef | null;
-  assignedBy: PersonRef | null;
-  assignedAt: string | null;
+  /** Everyone sharing the task, earliest first. They share its status and comments. */
+  assignees: TaskAssignee[];
   projectId: string | null;
   project: Named | null;
   createdAt: string;
@@ -125,6 +131,7 @@ export interface LinkedTask {
   id: string;
   title: string;
   status: TaskStatus;
+  assignees: Named[];
 }
 
 export interface Checkin {

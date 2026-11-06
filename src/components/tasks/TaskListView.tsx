@@ -1,11 +1,11 @@
 import React from 'react';
 import { Icon } from '../ui/Icon';
 import { STATUS_LABELS, Task, TASK_STATUSES, TaskStatus } from '../../api/types';
-import { nameAndTitle } from '../../lib/people';
 import { Link } from '../../lib/router';
 import { formatDateTime } from '../../lib/tasks';
 import { PriorityBadge, StatusBadge } from '../ui/badges';
 import { Select } from '../ui/Select';
+import { AssigneeStack } from './AssigneeStack';
 
 const STATUS_OPTIONS = TASK_STATUSES.map((value) => ({ value, label: STATUS_LABELS[value] }));
 
@@ -58,10 +58,7 @@ export const TaskListView: React.FC<TaskListViewProps> = ({
                 {formatDateTime(task.deadline)}
               </span>
             )}
-            <span className="inline-flex items-center gap-1.5">
-              <Icon name="person" size="sm" />
-              {task.assignee ? nameAndTitle(task.assignee) : 'Unassigned'}
-            </span>
+            <AssigneeStack people={task.assignees} showDetail />
           </div>
         </div>
 

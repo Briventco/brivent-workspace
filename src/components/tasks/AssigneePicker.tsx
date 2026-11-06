@@ -22,6 +22,8 @@ interface AssigneePickerProps {
   placeholder?: string;
   /** People who can't be picked, such as those already on a project. */
   excludeIds?: string[];
+  /** Leaves the list open after a pick, for choosing several people in a row. */
+  keepOpen?: boolean;
 }
 
 const UNASSIGNED_ID = '__unassigned__';
@@ -36,6 +38,7 @@ export const AssigneePicker: React.FC<AssigneePickerProps> = ({
   noneLabel = 'Unassigned',
   placeholder = 'Search by name',
   excludeIds = [],
+  keepOpen = false,
 }) => {
   const id = useId();
   const listId = `${id}-list`;
@@ -61,7 +64,10 @@ export const AssigneePicker: React.FC<AssigneePickerProps> = ({
   useEffect(() => {
     if (!isOpen) return;
     const handlePointerDown = (e: MouseEvent) => {
-      if (!containerRef.current?.contains(e.target as Node)) setIsOpen(false);
+      // composedPath, because picking someone can remove the clicked row before this runs.
+      if (containerRef.current && !e.composedPath().includes(containerRef.current)) {
+        setIsOpen(false);
+      }
     };
     document.addEventListener('mousedown', handlePointerDown);
     return () => document.removeEventListener('mousedown', handlePointerDown);
@@ -70,7 +76,8 @@ export const AssigneePicker: React.FC<AssigneePickerProps> = ({
   const choose = (person: DirectoryUser | null) => {
     onChange(person);
     setSearch('');
-    setIsOpen(false);
+    setActiveIndex(0);
+    if (!keepOpen) setIsOpen(false);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {

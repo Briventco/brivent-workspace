@@ -13,7 +13,7 @@ import { Input } from '../ui/Input';
 import { Modal, ModalBody, ModalFooter } from '../ui/Modal';
 import { Select } from '../ui/Select';
 import { Textarea } from '../ui/Textarea';
-import { AssigneePicker } from './AssigneePicker';
+import { MultiAssigneePicker } from './MultiAssigneePicker';
 
 interface TaskFormModalProps {
   /** Edits this task. Without it, the form creates a new one. */
@@ -42,7 +42,7 @@ export const TaskFormModal: React.FC<TaskFormModalProps> = ({
   const [description, setDescription] = useState(task?.description ?? prefill?.description ?? '');
   const [priority, setPriority] = useState<TaskPriority>(task?.priority ?? 'MEDIUM');
   const [deadline, setDeadline] = useState(toDeadlineInput(task?.deadline ?? null));
-  const [assignee, setAssignee] = useState<PersonRef | null>(task?.assignee ?? null);
+  const [assignees, setAssignees] = useState<PersonRef[]>(task?.assignees ?? []);
   const [projectId, setProjectId] = useState(task?.projectId ?? prefill?.projectId ?? '');
 
   const [errors, setErrors] = useState<{
@@ -76,7 +76,7 @@ export const TaskFormModal: React.FC<TaskFormModalProps> = ({
         description: description.trim(),
         priority,
         ...(deadline && { deadline: fromDeadlineInput(deadline) }),
-        ...(canAssign && assignee && { assigneeId: assignee.id }),
+        ...(canAssign && assignees.length > 0 && { assigneeIds: assignees.map(({ id }) => id) }),
         ...(projectId && { projectId }),
       });
     }
@@ -91,8 +91,13 @@ export const TaskFormModal: React.FC<TaskFormModalProps> = ({
       }
       if (projectId !== (task.projectId ?? '')) changes.projectId = projectId || null;
     }
-    if (canAssign && (assignee?.id ?? null) !== task.assigneeId) {
-      changes.assigneeId = assignee?.id ?? null;
+    // PATCH, not PUT, so one bad field fails the whole save rather than half of it.
+    const before = new Set(task.assignees.map(({ id }) => id));
+    if (
+      canAssign &&
+      (assignees.length !== before.size || assignees.some(({ id }) => !before.has(id)))
+    ) {
+      changes.assigneeIds = assignees.map(({ id }) => id);
     }
     return Object.keys(changes).length > 0 ? updateTask(task.id, changes) : Promise.resolve(null);
   };
@@ -196,10 +201,10 @@ export const TaskFormModal: React.FC<TaskFormModalProps> = ({
           )}
 
           {canAssign && (
-            <AssigneePicker
-              value={assignee}
-              onChange={(person) => {
-                setAssignee(person);
+            <MultiAssigneePicker
+              value={assignees}
+              onChange={(people) => {
+                setAssignees(people);
                 setErrors((current) => ({ ...current, assignee: undefined }));
               }}
               error={errors.assignee}

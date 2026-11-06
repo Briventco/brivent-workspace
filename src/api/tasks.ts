@@ -36,7 +36,7 @@ export interface NewTask {
   description: string;
   priority: TaskPriority;
   deadline?: string;
-  assigneeId?: string;
+  assigneeIds?: string[];
   projectId?: string;
 }
 
@@ -45,7 +45,7 @@ export interface TaskChanges {
   description?: string;
   priority?: TaskPriority;
   deadline?: string | null;
-  assigneeId?: string | null;
+  assigneeIds?: string[];
   projectId?: string | null;
 }
 
@@ -153,6 +153,15 @@ export async function createTask(task: NewTask): Promise<Task> {
 
 export async function updateTask(id: string, changes: TaskChanges): Promise<Task> {
   const data = await request<{ task: Task }>(`/tasks/${id}`, { method: 'PATCH', body: changes });
+  return data.task;
+}
+
+/** Replaces the whole set, so send everyone who should stay. An empty list unassigns everyone. */
+export async function setTaskAssignees(id: string, assigneeIds: string[]): Promise<Task> {
+  const data = await request<{ task: Task }>(`/tasks/${id}/assignees`, {
+    method: 'PUT',
+    body: { assigneeIds },
+  });
   return data.task;
 }
 

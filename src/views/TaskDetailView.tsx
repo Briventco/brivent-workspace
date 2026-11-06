@@ -3,6 +3,7 @@ import { Icon } from '../components/ui/Icon';
 import { ApiError, errorMessage } from '../api/client';
 import { deleteTask, getTask, updateTaskStatus } from '../api/tasks';
 import { STATUS_LABELS, Task, TASK_STATUSES, TaskStatus } from '../api/types';
+import { TaskAssignees } from '../components/tasks/TaskAssignees';
 import { TaskComments } from '../components/tasks/TaskComments';
 import { TaskFormModal } from '../components/tasks/TaskFormModal';
 import { AsyncState } from '../components/ui/AsyncState';
@@ -78,13 +79,6 @@ const TaskDetails: React.FC<{ task: Task; onChanged: () => void }> = ({ task, on
           },
         ]
       : []),
-    { label: 'Assignee', value: task.assignee ? nameAndTitle(task.assignee) : 'Unassigned' },
-    ...(task.assignedBy && task.assignedAt
-      ? [
-          { label: 'Assigned by', value: nameAndTitle(task.assignedBy) },
-          { label: 'Assigned on', value: formatDateTime(task.assignedAt) },
-        ]
-      : []),
     { label: 'Deadline', value: task.deadline ? formatDateTime(task.deadline) : 'No deadline' },
     { label: 'Created by', value: nameAndTitle(task.creator) },
     { label: 'Created on', value: formatDateTime(task.createdAt) },
@@ -156,6 +150,7 @@ const TaskDetails: React.FC<{ task: Task; onChanged: () => void }> = ({ task, on
                 </div>
               ))}
             </dl>
+            <TaskAssignees task={task} onChanged={onChanged} />
           </CardBody>
         </Card>
       </div>

@@ -4,6 +4,7 @@ import { Link } from '../../lib/router';
 import { Avatar } from '../ui/Avatar';
 import { StatusBadge } from '../ui/badges';
 import { Icon } from '../ui/Icon';
+import { AssigneeStack } from '../tasks/AssigneeStack';
 
 export const Answer: React.FC<{ label: string; children: React.ReactNode }> = ({
   label,
@@ -47,9 +48,10 @@ export const LinkedTasks: React.FC<{ checkin: Checkin }> = ({ checkin }) =>
       {checkin.linkedTasks.map((task) => (
         <li key={task.id} className="flex items-center gap-2 min-w-0">
           <StatusBadge status={task.status} />
-          <Link to={`/tasks/${task.id}`} className="truncate text-text">
+          <Link to={`/tasks/${task.id}`} className="grow min-w-0 truncate text-text">
             {task.title}
           </Link>
+          <AssigneeStack people={task.assignees} size="xs" />
         </li>
       ))}
     </ul>
