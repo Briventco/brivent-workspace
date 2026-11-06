@@ -5,6 +5,7 @@ import re
 import sys
 import time
 import urllib.error
+import urllib.error
 import urllib.request
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -138,6 +139,13 @@ def fill_passwords(page, password, confirm=None):
     page.get_by_label("Confirm new password").fill(confirm or password)
 
 
+def has_projects(token):
+    try:
+        return "projects" in call("GET", "/projects?limit=1", token)
+    except urllib.error.HTTPError:
+        return False
+
+
 def is_weekend():
     return datetime.now(timezone(timedelta(hours=1))).weekday() >= 5
 
@@ -215,6 +223,8 @@ def main():
                 run_invites(browser, page)
                 if "checkedInToday" in call("GET", "/tasks/summary", admin_token)["summary"]:
                     run_checkins(browser, admin_token)
+                if has_projects(admin_token):
+                    run_projects(browser, admin_token)
             run_team_lead(browser, lead_task, lead_name, intern_name)
             run_permissions(lead_email, lead_password)
             run_intern(browser, lead_task, admin_task)
@@ -1101,6 +1111,172 @@ def run_checkins(browser, admin_token):
                 page.context.close()
     step("Check-in: form and review fit 375, 1280 and 1440", fits)
     member.context.close()
+    lead.context.close()
+
+
+def run_projects(browser, admin_token):
+    project_name = f"{PREFIX} Servra"
+    task_title = f"{PREFIX} project task"
+    other_task = f"{PREFIX} someone else's task"
+    intern_name = call("POST", "/auth/login", body=dict(zip(("email", "password"), credentials("INTERN"))))["user"]
+    lead = new_page(browser)
+    log_in(lead, "TEAM_LEAD")
+    project_url = {}
+
+    def create():
+        expect(lead.get_by_role("link", name="Projects")).not_to_contain_text("Soon")
+        open_nav_link(lead, "Projects")
+        lead.get_by_role("button", name="New project").click()
+        panel = lead.get_by_role("dialog")
+        panel.get_by_label("Project name").fill(project_name)
+        panel.get_by_label("What is it for?").fill("Orders over WhatsApp.")
+        panel.get_by_label("Start date").fill("2026-12-20")
+        panel.get_by_label("Target date").fill("2026-12-01")
+        panel.get_by_role("button", name="Create project").click()
+        expect(panel.get_by_text("can't be before the start")).to_be_visible()
+        panel.get_by_label("Target date").fill("2026-12-28")
+        picker = panel.get_by_role("combobox", name="Members")
+        picker.click()
+        picker.fill(intern_name["name"].split()[0])
+        panel.get_by_role("option", name=re.compile(re.escape(intern_name["name"]))).click()
+        panel.get_by_role("button", name="Create project").click()
+        expect(lead.get_by_role("heading", name=project_name)).to_be_visible()
+        project_url["url"] = lead.url
+        expect(lead.get_by_text("Owner", exact=False).first).to_be_visible()
+        expect(lead.get_by_role("button", name=re.compile("Delete"))).to_have_count(0)
+    step("Projects: a manager creates one, and bad dates are caught", create)
+
+    def task_in_project():
+        lead.locator("main").get_by_role("button", name="New task").first.click()
+        dialog = lead.get_by_role("dialog")
+        select = dialog.get_by_label("Project")
+        expect(select).to_have_value(project_url["url"].rsplit("/", 1)[1])
+        dialog.get_by_label("Title").fill(task_title)
+        pick_assignee(dialog, intern_name["name"])
+        dialog.get_by_role("button", name="Create task").click()
+        expect(lead.get_by_role("heading", name=task_title)).to_be_visible()
+        expect(lead.get_by_role("link", name=project_name)).to_be_visible()
+        lead.goto(project_url["url"])
+        expect(lead.get_by_role("link", name=re.compile(re.escape(task_title)))).to_be_visible()
+    step("Projects: New task from a project presets it", task_in_project)
+
+    def task_list():
+        open_nav_link(lead, "My Tasks")
+        lead.get_by_role("tab", name="All tasks").click()
+        lead.get_by_label("Filter by project").select_option(label=project_name)
+        expect(lead.get_by_role("link", name=task_title)).to_be_visible()
+        expect(lead.get_by_role("link", name=project_name).first).to_be_visible()
+        expect(lead.locator("main").get_by_role("link", name=re.compile(re.escape(PREFIX) + " lead"))).to_have_count(0)
+    step("Tasks: project filter and project tags on rows", task_list)
+
+    def card():
+        open_nav_link(lead, "Projects")
+        tile = lead.get_by_role("link", name=re.compile(re.escape(project_name)))
+        expect(tile).to_contain_text("0 of 1 tasks done")
+        expect(tile).to_contain_text("Dec 28")
+        lead.get_by_label("Search projects").fill("no such project")
+        expect(lead.get_by_role("heading", name="No projects match")).to_be_visible()
+        lead.get_by_role("button", name="Clear search").click()
+        expect(tile).to_be_visible()
+    step("Projects: cards show progress and dates, and search clears", card)
+
+    def intern_view():
+        page = new_page(browser)
+        log_in(page, "INTERN")
+        page.goto(f"{APP}/projects")
+        expect(page.get_by_role("button", name="New project")).to_have_count(0)
+        page.get_by_role("link", name=re.compile(re.escape(project_name))).click()
+        expect(page.get_by_role("heading", name=project_name)).to_be_visible()
+        expect(page.get_by_role("button", name="Edit project")).to_have_count(0)
+        expect(page.get_by_role("button", name="New task")).to_have_count(0)
+        expect(page.get_by_role("button", name=re.compile("^Remove"))).to_have_count(0)
+        page.context.close()
+    step("Projects: members can look but get no manager actions", intern_view)
+
+    def read_only_comments():
+        project_id = project_url["url"].rsplit("/", 1)[1]
+        task = call("POST", "/tasks", admin_token, {"title": other_task, "projectId": project_id})["task"]
+        page = new_page(browser)
+        log_in(page, "INTERN")
+        page.goto(f"{APP}/tasks/{task['id']}")
+        expect(page.get_by_role("heading", name=other_task)).to_be_visible()
+        expect(page.get_by_label("Add a comment")).to_have_count(0)
+        page.context.close()
+    step("Tasks: someone seeing a task through its project can't comment", read_only_comments)
+
+    def not_a_member():
+        other = call("POST", "/projects", admin_token, {"name": f"{PREFIX} private"})["project"]
+        intern = new_page(browser)
+        log_in(intern, "INTERN")
+        intern.goto(f"{APP}/projects/{other['id']}")
+        expect(intern.get_by_role("heading", name="You're not on this project")).to_be_visible()
+        intern.get_by_role("link", name="All projects").click()
+        expect(intern.get_by_role("heading", name="Projects", exact=True)).to_be_visible()
+        intern.context.close()
+        lead.goto(f"{APP}/projects/{other['id']}")
+        expect(lead.get_by_role("heading", name=f"{PREFIX} private")).to_be_visible()
+        expect(lead.get_by_role("button", name="Edit project")).to_have_count(0)
+        expect(lead.get_by_role("button", name="Add")).to_have_count(0)
+    step("Projects: no access off the project, and leads only edit their own", not_a_member)
+
+    def members():
+        lead.goto(project_url["url"])
+        lead.get_by_role("button", name=f"Remove {intern_name['name']}").click()
+        dialog = lead.get_by_role("dialog")
+        expect(dialog.get_by_text("Their tasks stay in the project")).to_be_visible()
+        dialog.get_by_role("button", name="Remove").click()
+        expect(lead.get_by_text(f"{intern_name['name']} has been removed.")).to_be_visible()
+        expect(lead.get_by_role("link", name=re.compile(re.escape(task_title)))).to_be_visible()
+        lead.get_by_role("button", name="Add", exact=True).click()
+        picker = lead.get_by_role("combobox", name="Add a member")
+        picker.click()
+        picker.fill(intern_name["name"].split()[0])
+        lead.get_by_role("option", name=re.compile(re.escape(intern_name["name"]))).click()
+        expect(lead.get_by_role("button", name=f"Remove {intern_name['name']}")).to_be_visible()
+    step("Projects: remove a member, keep their tasks, add them back", members)
+
+    def complete():
+        lead.get_by_role("button", name="Edit project").click()
+        panel = lead.get_by_role("dialog")
+        expect(panel.get_by_text("Use Completed")).to_be_visible()
+        expect(panel.get_by_role("button", name=re.compile("Delete"))).to_have_count(0)
+        panel.get_by_label("Status").select_option("COMPLETED")
+        panel.get_by_role("button", name="Save changes").click()
+        expect(lead.get_by_text("Project updated.")).to_be_visible()
+        expect(lead.locator("main .badge", has_text="Completed").first).to_be_visible()
+        expect(lead.locator("main").get_by_role("button", name="New task")).to_have_count(0)
+        lead.goto(f"{APP}/projects")
+        lead.get_by_role("tab", name=re.compile("Completed")).click()
+        expect(lead.get_by_role("link", name=re.compile(re.escape(project_name)))).to_be_visible()
+    step("Projects: Completed replaces delete and takes no new tasks", complete)
+
+    def states():
+        page = new_page(browser)
+        log_in(page, "INTERN")
+        page.route(f"{api_url()}/projects*", lambda route: route.abort())
+        page.goto(f"{APP}/projects")
+        expect(page.get_by_role("heading", name="Couldn't load projects")).to_be_visible()
+        page.unroute_all()
+        page.route(
+            f"{api_url()}/projects*",
+            lambda route: route.fulfill(json={"projects": [], "total": 0, "page": 1, "limit": 100}),
+        )
+        page.get_by_role("button", name="Try again").click()
+        expect(page.get_by_role("heading", name="No projects yet")).to_be_visible()
+        expect(page.get_by_role("button", name="New project")).to_have_count(0)
+        page.context.close()
+    step("Projects: error and empty states, with no action for members (simulated)", states)
+
+    def fits():
+        for width in (375, 1280, 1440):
+            page = new_page(browser, {"width": width, "height": 800})
+            log_in(page, "TEAM_LEAD")
+            for path in ("/projects", project_url["url"].replace(APP, "")):
+                page.goto(APP + path)
+                page.get_by_role("heading", level=1).wait_for()
+                expect_no_sideways_scroll(page, f"{path} at {width}")
+            page.context.close()
+    step("Projects: list and detail fit 375, 1280 and 1440", fits)
     lead.context.close()
 
 
