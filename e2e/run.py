@@ -6,6 +6,7 @@ import sys
 import time
 import urllib.error
 import urllib.request
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from playwright.sync_api import expect, sync_playwright
@@ -17,6 +18,7 @@ PREFIX = f"[e2e] {RUN}"
 DESTRUCTIVE = os.environ.get("E2E_DESTRUCTIVE") == "1"
 # The backend's console output. Outside production it prints emails there instead of sending them.
 BACKEND_LOG = os.environ.get("E2E_BACKEND_LOG")
+GREETING = re.compile("^Good (morning|afternoon|evening)")
 PASSWORD = "e2e-brand-new-passphrase"
 SECOND_PASSWORD = "e2e-another-new-passphrase"
 MOBILE = {"width": 375, "height": 720}
@@ -105,7 +107,7 @@ def log_in_as(page, email, password):
     page.get_by_label("Work email").fill(email)
     page.get_by_label("Password", exact=True).fill(password)
     page.get_by_role("button", name="Sign in").click()
-    expect(page.get_by_role("heading", name=re.compile("^Welcome"))).to_be_visible(timeout=45_000)
+    expect(page.get_by_role("heading", name=GREETING)).to_be_visible(timeout=45_000)
 
 
 def open_nav_link(page, name):
@@ -136,6 +138,10 @@ def fill_passwords(page, password, confirm=None):
     page.get_by_label("Confirm new password").fill(confirm or password)
 
 
+def is_weekend():
+    return datetime.now(timezone(timedelta(hours=1))).weekday() >= 5
+
+
 def expect_url_is(page, path):
     """The whole address, so a surviving token or a redirect both fail."""
     expect(page).to_have_url(f"{APP}{path}")
@@ -149,6 +155,11 @@ def invite(admin, name, email):
     dialog.get_by_label("Work email").fill(email)
     dialog.get_by_role("button", name="Send invite").click()
     dialog.get_by_role("button", name="Done").click()
+
+
+def call_wat_date():
+    now = datetime.now(timezone(timedelta(hours=1)))
+    return f"{now:%A}, {now.day} {now:%B}"
 
 
 def expect_no_sideways_scroll(page, label):
@@ -198,6 +209,7 @@ def main():
             run_foundations(browser)
             run_public_pages(browser)
             run_shell(browser)
+            run_dashboard(browser, admin_token)
             run_admin(browser, page, admin_task, throwaway_task, intern_name)
             if DESTRUCTIVE and BACKEND_LOG:
                 run_invites(browser, page)
@@ -417,12 +429,13 @@ def run_permissions(lead_email, lead_password):
 def run_admin(browser, page, title, throwaway, intern_name):
     def dashboard():
         log_in(page, "SUPER_ADMIN")
-        for label in ("Open", "Overdue", "Done this week"):
-            expect(page.get_by_text(label, exact=True).first).to_be_visible()
-        expect(page.get_by_role("heading", name="Team-wide")).to_be_visible()
-        expect(page.get_by_role("heading", name="My tasks due soon")).to_be_visible()
+        for label in ("Open", "Overdue", "Blocked", "Done this week"):
+            expect(page.locator(".kpi").get_by_text(label, exact=True).first).to_be_visible()
+        expect(page.get_by_role("heading", name="Overdue across the team")).to_be_visible()
+        expect(page.get_by_role("heading", name="Open work by person")).to_be_visible()
+        expect(page.get_by_role("heading", name="Your own tasks")).to_be_visible()
         expect(page.get_by_role("link", name="Notifications")).to_have_count(0)
-    step("Super Admin: dashboard shows team counts, lists and no bell", dashboard)
+    step("Super Admin: dashboard shows team numbers, overdue, workload and own tasks", dashboard)
 
     def create():
         create_task(page, title, intern_name)
@@ -610,6 +623,31 @@ def run_invites(browser, admin):
         expect(row.get_by_role("button", name=f"Resend invite to {name}")).to_have_count(0)
     step("Invited user logs in with the password they chose, and shows as Active", log_in_after)
 
+    def first_day():
+        expect(fresh.get_by_role("heading", name="Nothing on your plate yet")).to_be_visible()
+        token = call("POST", "/auth/login", body={"email": email, "password": PASSWORD})["token"]
+        if "checkedInToday" not in call("GET", "/tasks/summary", token)["summary"]:
+            return
+        if not is_weekend():
+            expect(fresh.get_by_text("You haven't checked in today")).to_be_visible()
+        call("PUT", "/checkins/today", token, {
+            "workCompleted": "First day.",
+            "priorities": "Getting set up.",
+            "blockers": f"Blocked by {name}",
+        })
+        fresh.reload()
+        if not is_weekend():
+            expect(fresh.get_by_text(re.compile("^Checked in at"))).to_be_visible()
+        lead = new_page(browser)
+        log_in(lead, "TEAM_LEAD")
+        blocker = lead.locator("li", has_text=f"Blocked by {name}")
+        expect(blocker).to_be_visible()
+        blocker.get_by_role("button", name="Mark handled").click()
+        expect(blocker).to_have_count(0)
+        lead.context.close()
+        admin.reload()
+    step("New user: empty dashboard, check-in card, then the lead handles the blocker", first_day)
+
     def used_link():
         link = emailed_link(email, "/set-password")
         page = new_page(browser)
@@ -638,12 +676,6 @@ def run_invites(browser, admin):
         name3, email3 = f"E2E Fill {RUN}", f"e2e.fill.{RUN}@example.test"
         invite(admin, name3, email3)
         page = new_page(browser)
-
-        def add_email(route):
-            response = route.fetch()
-            route.fulfill(response=response, json={**response.json(), "email": email3})
-
-        page.route(f"{api_url()}/auth/set-password", add_email)
         page.goto(emailed_link(email3, "/set-password"))
         fill_passwords(page, PASSWORD)
         page.get_by_role("button", name="Set password").click()
@@ -651,7 +683,7 @@ def run_invites(browser, admin):
         expect(page.get_by_label("Password", exact=True)).to_be_focused()
         assert email3 not in page.url
         page.context.close()
-    step("Login: fills the email in when the API sends one (response simulated)", prefills_email)
+    step("Login: fills the email in after setting a password", prefills_email)
 
     def forgot():
         page = new_page(browser)
@@ -766,6 +798,113 @@ def run_invites(browser, admin):
         expect(row.get_by_text("Pending invite", exact=True)).to_be_visible()
     step("Pending user: deactivate, then reactivate returns them to Pending", deactivate_pending)
     fresh.context.close()
+
+
+def run_dashboard(browser, admin_token):
+    page = new_page(browser)
+
+    def member_view():
+        log_in(page, "INTERN")
+        expect(page.get_by_role("heading", name="Overdue across the team")).to_have_count(0)
+        expect(page.get_by_role("heading", name="Open work by person")).to_have_count(0)
+        for label in ("Open", "Overdue", "Due today", "Done this week"):
+            expect(page.locator(".kpi").get_by_text(label, exact=True).first).to_be_visible()
+    step("Dashboard: Interns get their own numbers and no team cards", member_view)
+
+    def numbers_link():
+        for label, url, chip in (
+            ("Open", "/tasks?preset=open", "Open"),
+            ("Due today", "/tasks?preset=dueToday", "Due today"),
+            ("Done this week", "/tasks?preset=doneThisWeek", "Done this week"),
+            ("Overdue", "/tasks?overdue=true", "Overdue only"),
+        ):
+            page.goto(f"{APP}/")
+            page.locator("a.kpi").filter(has_text=label).first.click()
+            expect(page).to_have_url(f"{APP}{url}")
+            expect(page.locator("main .chip.on", has_text=chip)).to_be_visible()
+    step("Dashboard: every number opens its filtered list", numbers_link)
+
+    def fields_stay_hidden():
+        def strip(route):
+            response = route.fetch()
+            summary = response.json()["summary"]
+            for field in ("checkedInToday", "teamCheckins", "upcomingMeetings"):
+                summary.pop(field, None)
+            route.fulfill(response=response, json={"summary": summary})
+
+        other = new_page(browser)
+        other.route(f"{api_url()}/tasks/summary", strip)
+        log_in(other, "INTERN")
+        expect(other.get_by_role("heading", name="Needs your attention")).to_be_visible()
+        expect(other.get_by_text("checked in today")).to_have_count(0)
+        expect(other.get_by_text("Checked in at")).to_have_count(0)
+        expect(other.get_by_role("heading", name="Today's meetings")).to_have_count(0)
+        other.context.close()
+        other = new_page(browser)
+        other.route(f"{api_url()}/tasks/summary", strip)
+        log_in(other, "TEAM_LEAD")
+        expect(other.get_by_role("heading", name="Overdue across the team")).to_be_visible()
+        expect(other.get_by_role("heading", name="Blockers raised today")).to_have_count(0)
+        expect(other.get_by_role("heading", name="Not checked in yet")).to_have_count(0)
+        expect(other.locator(".kpi").get_by_text("Checked in today")).to_have_count(0)
+        other.context.close()
+    step("Dashboard: check-in and meeting parts stay hidden without their fields (simulated)", fields_stay_hidden)
+
+    def page_error():
+        other = new_page(browser)
+        log_in(other, "INTERN")
+        other.route(f"{api_url()}/tasks/summary", lambda route: route.abort())
+        other.reload()
+        expect(other.get_by_role("heading", name="Couldn't load your dashboard")).to_be_visible()
+        other.unroute_all()
+        other.get_by_role("button", name="Try again").click()
+        expect(other.get_by_role("heading", name="Needs your attention")).to_be_visible()
+        other.context.close()
+    step("Dashboard: a failed load explains itself and Try again recovers (simulated)", page_error)
+
+    def card_error():
+        other = new_page(browser)
+        log_in(other, "TEAM_LEAD")
+
+        def fail_list(route):
+            return route.abort() if "/tasks/summary" not in route.request.url else route.fallback()
+
+        other.route(f"{api_url()}/tasks?*", fail_list)
+        other.reload()
+        expect(other.get_by_role("heading", name="Couldn't load tasks").first).to_be_visible()
+        expect(other.get_by_role("heading", name=GREETING)).to_be_visible()
+        expect(other.locator(".kpi").first).to_be_visible()
+        other.context.close()
+    step("Dashboard: one failed card leaves the rest working (simulated)", card_error)
+
+    def wat_everywhere():
+        context = browser.new_context(viewport=LAPTOP, timezone_id="America/New_York")
+        other = context.new_page()
+        log_in(other, "INTERN")
+        heading = other.locator("main header p").first.inner_text()
+        expected = call_wat_date()
+        assert heading == expected, f"{heading} is not {expected}"
+        context.close()
+    step("Dashboard: the date is WAT even for a viewer in another timezone", wat_everywhere)
+
+    def phones():
+        for role in ("INTERN", "TEAM_LEAD"):
+            other = new_page(browser, MOBILE)
+            log_in(other, role)
+            expect(other.locator(".kpi:visible")).to_have_count(3 if role == "INTERN" else 4)
+            expect_no_sideways_scroll(other, f"/ as {role}")
+            other.context.close()
+    step("Dashboard: phone versions fit 375px with the designed numbers", phones)
+
+    def widths():
+        for width in (1280, 1440):
+            for role in ("INTERN", "TEAM_LEAD"):
+                other = new_page(browser, {"width": width, "height": 900})
+                log_in(other, role)
+                expect_no_sideways_scroll(other, f"/ at {width} as {role}")
+                other.context.close()
+    step("Dashboard: fits 1280 and 1440 for both versions", widths)
+    page.context.close()
 
 
 def run_shell(browser):
