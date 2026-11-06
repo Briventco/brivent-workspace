@@ -81,6 +81,31 @@ export function formatDayMonth(date: Date, withYear = true): string {
   return withYear ? `${day} ${month} ${year}` : `${day} ${month}`;
 }
 
+/** { weekday: 'Mon', day: '2' }, for a column heading or the day strip. */
+export function weekdayAndDay(date: Date): { weekday: string; day: string } {
+  const { weekday, day } = parts(date, { weekday: 'short', day: 'numeric' });
+  return { weekday, day };
+}
+
+/** 2 to 6 November, or 30 Nov to 4 Dec across two months. */
+export function formatDayRange(first: Date, last: Date): string {
+  const start = parts(first, { day: 'numeric', month: 'long' });
+  const end = parts(last, { day: 'numeric', month: 'long' });
+  if (start.month === end.month) return `${start.day} to ${end.day} ${end.month}`;
+  return `${formatDayMonth(first, false)} to ${formatDayMonth(last, false)}`;
+}
+
+/** 15:00 */
+export function format24Hour(date: Date): string {
+  const { hour, minute } = parts(date, { hour: '2-digit', minute: '2-digit', hour12: false });
+  return `${hour}:${minute}`;
+}
+
+/** 3:00 */
+export function formatClock(date: Date): string {
+  return formatTime(date).split(' ')[0];
+}
+
 /** 9:14 AM */
 export function formatTime(date: Date): string {
   const { hour, minute, dayPeriod } = parts(
