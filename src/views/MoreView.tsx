@@ -2,9 +2,9 @@ import React from 'react';
 import { Avatar } from '../components/ui/Avatar';
 import { Card } from '../components/ui/Card';
 import { Icon } from '../components/ui/Icon';
-import { RoleBadge } from '../components/ui/badges';
 import { BOTTOM_BAR_PATHS, useNavSections } from '../components/layout/navItems';
 import { useAuth, useSession } from '../context/AuthContext';
+import { personTitle } from '../lib/people';
 import { Link } from '../lib/router';
 
 const ROW = 'flex items-center gap-3 w-full min-h-[52px] px-4 text-text bg-transparent border-0';
@@ -28,9 +28,9 @@ export const MoreView: React.FC = () => {
         <Avatar name={user.fullName} id={user.id} />
         <div className="min-w-0 grow">
           <p className="font-semibold text-text truncate">{user.fullName}</p>
+          <p className="text-small text-text-2 truncate">{personTitle(user)}</p>
           <p className="text-small text-text-2 truncate">{user.email}</p>
         </div>
-        <RoleBadge role={user.role} />
       </div>
 
       {sections.map((section) => (

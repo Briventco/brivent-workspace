@@ -8,6 +8,13 @@ import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
 import { Modal, ModalBody, ModalFooter } from '../ui/Modal';
 import { Select } from '../ui/Select';
+import {
+  PlacementErrors,
+  placementErrors,
+  PlacementFields,
+  placementOf,
+  toPlacementIds,
+} from './PlacementFields';
 
 interface EditUserModalProps {
   user: User;
@@ -26,6 +33,9 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
 }) => {
   const toast = useToast();
   const [fullName, setFullName] = useState(user.fullName);
+  const [placement, setPlacement] = useState(placementOf(user));
+  const [placementError, setPlacementError] = useState<PlacementErrors>({});
+  const [refreshKey, setRefreshKey] = useState(0);
   const [role, setRole] = useState<Role>(user.role);
   const [nameError, setNameError] = useState<string | undefined>();
   const [formError, setFormError] = useState('');
@@ -45,10 +55,18 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
       return;
     }
     setNameError(undefined);
+    setPlacementError({});
 
     const changes: UserChanges = {};
     if (trimmedName !== user.fullName) changes.fullName = trimmedName;
     if (role !== user.role) changes.role = role;
+    const before = placementOf(user);
+    if (
+      placement.departmentId !== before.departmentId ||
+      placement.positionId !== before.positionId
+    ) {
+      Object.assign(changes, toPlacementIds(placement));
+    }
     if (Object.keys(changes).length === 0) {
       onClose();
       return;
@@ -60,7 +78,11 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
       toast.success(`${trimmedName} has been updated.`);
       onSaved();
     } catch (error) {
-      if (error instanceof ApiError && error.fieldErrors.name) {
+      const placementProblem = placementErrors(error);
+      if (placementProblem) {
+        setPlacementError(placementProblem);
+        setRefreshKey((key) => key + 1);
+      } else if (error instanceof ApiError && error.fieldErrors.name) {
         setNameError(error.fieldErrors.name);
       } else {
         setFormError(errorMessage(error));
@@ -82,13 +104,20 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
             autoComplete="off"
             data-autofocus
           />
+          <PlacementFields
+            value={placement}
+            onChange={setPlacement}
+            errors={placementError}
+            refreshKey={refreshKey}
+            user={user}
+          />
           <Select
-            label="Role"
+            label="Access level"
             value={role}
             onChange={(e) => setRole(e.target.value as Role)}
             options={roleOptions}
             disabled={isSelf}
-            helperText={isSelf ? "You can't change your own role." : undefined}
+            helperText={isSelf ? "You can't change your own access level." : undefined}
           />
         </ModalBody>
         <ModalFooter>

@@ -6,9 +6,10 @@ import {
   TeamCheckins,
 } from '../../api/checkins';
 import { ApiError, errorMessage } from '../../api/client';
-import { Checkin, CheckinPerson, ROLE_LABELS } from '../../api/types';
+import { Checkin, CheckinPerson } from '../../api/types';
 import { useSession } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
+import { personTitle } from '../../lib/people';
 import { useApiQuery } from '../../lib/useApiQuery';
 import {
   addDays,
@@ -21,7 +22,6 @@ import {
 import { TaskFormModal } from '../tasks/TaskFormModal';
 import { ErrorState, NoAccess } from '../ui/AsyncState';
 import { Avatar } from '../ui/Avatar';
-import { RoleBadge } from '../ui/badges';
 import { Button, IconButton } from '../ui/Button';
 import { Card, CardHeader } from '../ui/Card';
 import { Chip } from '../ui/Chip';
@@ -118,7 +118,7 @@ const BlockerCard: React.FC<{ checkin: Checkin; onChanged: () => void }> = ({
         <div className="min-w-0 grow">
           <p className="font-semibold truncate">{checkin.user.name}</p>
           <p className="text-small text-text-2">
-            {ROLE_LABELS[checkin.user.role]} · {formatTime(new Date(checkin.submittedAt))}
+            {personTitle(checkin.user)} · {formatTime(new Date(checkin.submittedAt))}
           </p>
         </div>
         {checkin.isLate && <LateTag />}
@@ -206,7 +206,7 @@ const SubmittedRow: React.FC<{ checkin: Checkin; onChanged: () => void }> = ({
             {checkin.user.name}
             {isYou && ' (you)'}
           </span>
-          <RoleBadge role={checkin.user.role} />
+          <span className="text-small text-text-2">{personTitle(checkin.user)}</span>
           <span className="text-small text-text-2">
             {formatTime(new Date(checkin.submittedAt))}
           </span>
@@ -245,7 +245,7 @@ const MissingCard: React.FC<{ people: CheckinPerson[] }> = ({ people }) => (
           <li key={person.id} className="li">
             <Avatar name={person.name} id={person.id} size="sm" />
             <span className="min-w-0 grow title truncate">{person.name}</span>
-            <RoleBadge role={person.role} />
+            <span className="text-small text-text-2 truncate">{personTitle(person)}</span>
           </li>
         ))}
       </ul>

@@ -3,12 +3,12 @@ import { setBlockerHandled, TeamCheckins } from '../../api/checkins';
 import { errorMessage } from '../../api/client';
 import { useSession } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
+import { personTitle } from '../../lib/people';
 import { Link } from '../../lib/router';
 import { ApiQuery } from '../../lib/useApiQuery';
 import { formatTime } from '../../lib/wat';
 import { AsyncState } from '../ui/AsyncState';
 import { Avatar } from '../ui/Avatar';
-import { RoleBadge } from '../ui/badges';
 import { Button } from '../ui/Button';
 import { Card, CardHeader } from '../ui/Card';
 
@@ -66,7 +66,7 @@ export const BlockersCard: React.FC<{ query: ApiQuery<TeamCheckins>; onChanged: 
                   <p>
                     <span className="font-semibold">{checkin.user.name}</span>{' '}
                     <span className="text-small text-text-2">
-                      from their check-in · {formatTime(new Date(checkin.submittedAt))}
+                      {personTitle(checkin.user)} · {formatTime(new Date(checkin.submittedAt))}
                     </span>
                   </p>
                   <p className="mt-1 break-words">"{checkin.blockers}"</p>
@@ -114,7 +114,7 @@ export const NotCheckedInCard: React.FC<{ query: ApiQuery<TeamCheckins> }> = ({ 
             <li key={person.id} className="li">
               <Avatar name={person.name} id={person.id} />
               <span className="min-w-0 grow title truncate">{person.name}</span>
-              <RoleBadge role={person.role} />
+              <span className="text-small text-text-2 truncate">{personTitle(person)}</span>
             </li>
           ))}
         </ul>

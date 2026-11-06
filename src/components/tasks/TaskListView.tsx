@@ -1,6 +1,7 @@
 import React from 'react';
 import { Icon } from '../ui/Icon';
 import { STATUS_LABELS, Task, TASK_STATUSES, TaskStatus } from '../../api/types';
+import { nameAndTitle } from '../../lib/people';
 import { Link } from '../../lib/router';
 import { formatDateTime } from '../../lib/tasks';
 import { PriorityBadge, StatusBadge } from '../ui/badges';
@@ -59,7 +60,7 @@ export const TaskListView: React.FC<TaskListViewProps> = ({
             )}
             <span className="inline-flex items-center gap-1.5">
               <Icon name="person" size="sm" />
-              {task.assignee?.name ?? 'Unassigned'}
+              {task.assignee ? nameAndTitle(task.assignee) : 'Unassigned'}
             </span>
           </div>
         </div>

@@ -1,5 +1,5 @@
 import { request } from './client';
-import { LinkedTask, PersonRef, Role } from './types';
+import { LinkedTask, Named, PersonRef, Role } from './types';
 
 export type Rsvp = 'PENDING' | 'YES' | 'NO' | 'MAYBE';
 export type MeetingScope = 'mine' | 'team';
@@ -21,7 +21,7 @@ export interface Meeting {
   cancelledAt: string | null;
   organizer: PersonRef;
   /** Null when there's no project, or when this viewer isn't allowed to see it. */
-  project: PersonRef | null;
+  project: Named | null;
   attendees: MeetingAttendee[];
   /** Null when this viewer isn't invited. */
   myRsvp: Rsvp | null;

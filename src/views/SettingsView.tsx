@@ -2,11 +2,12 @@ import React from 'react';
 import { format } from 'date-fns';
 import { PasswordChangeForm } from '../components/auth/PasswordChangeForm';
 import { Avatar } from '../components/ui/Avatar';
-import { RoleBadge } from '../components/ui/badges';
 import { Button } from '../components/ui/Button';
 import { Card, CardBody, CardHeader } from '../components/ui/Card';
 import { PageHeader } from '../components/ui/PageHeader';
+import { ROLE_LABELS } from '../api/types';
 import { useAuth, useSession } from '../context/AuthContext';
+import { personTitle } from '../lib/people';
 
 export const SettingsView: React.FC = () => {
   const { signOut } = useAuth();
@@ -14,6 +15,9 @@ export const SettingsView: React.FC = () => {
 
   const details = [
     { label: 'Email', value: user.email },
+    { label: 'Department', value: user.department?.name ?? 'Not set' },
+    { label: 'Position', value: user.position?.name ?? 'Not set' },
+    { label: 'Access level', value: ROLE_LABELS[user.role] },
         { label: 'Member since', value: format(new Date(user.createdAt), 'd MMMM yyyy') },
   ];
 
@@ -32,9 +36,7 @@ export const SettingsView: React.FC = () => {
                 <Avatar name={user.fullName} id={user.id} size="xl" />
                 <div className="min-w-0">
                   <p className="t-h2 truncate">{user.fullName}</p>
-                  <div className="mt-1">
-                    <RoleBadge role={user.role} />
-                  </div>
+                  <p className="mt-1 text-text-2 truncate">{personTitle(user)}</p>
                 </div>
               </div>
               <dl className="mt-6 space-y-3">

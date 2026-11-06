@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import brandIcon from '../../assets/brivent/logos/brivent-icon-cobalt.svg';
-import { ROLE_LABELS } from '../../api/types';
 import { useAuth, useSession } from '../../context/AuthContext';
+import { personTitle } from '../../lib/people';
 import { Link, navigate, usePathname } from '../../lib/router';
 import { resolveRoute } from '../../routes';
 import { TaskFormModal } from '../tasks/TaskFormModal';
@@ -52,7 +52,7 @@ const UserMenu: React.FC = () => {
         <Avatar name={user.fullName} id={user.id} />
         <span className="hidden sm:block text-left min-w-0 max-w-[12rem]">
           <span className="block font-semibold text-text truncate">{user.fullName}</span>
-          <span className="block text-caption text-text-2">{ROLE_LABELS[user.role]}</span>
+          <span className="block text-caption text-text-2 truncate">{personTitle(user)}</span>
         </span>
         <Icon name="expand_more" size="sm" />
       </button>
@@ -61,6 +61,7 @@ const UserMenu: React.FC = () => {
         <div className="popover absolute right-0 mt-2 w-64 p-1.5 z-40">
           <div className="px-3 py-2 mb-1 border-b border-border">
             <p className="font-semibold text-text truncate">{user.fullName}</p>
+            <p className="text-small text-text-2 truncate">{personTitle(user)}</p>
             <p className="text-small text-text-2 truncate">{user.email}</p>
           </div>
           <Link

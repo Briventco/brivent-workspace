@@ -1,41 +1,69 @@
 import React, { useMemo, useState } from 'react';
+import { listDepartments } from '../api/departments';
 import { DirectoryUser, Role, ROLE_LABELS, ROLES } from '../api/types';
 import { listDirectory } from '../api/users';
 import { AsyncState } from '../components/ui/AsyncState';
 import { Avatar } from '../components/ui/Avatar';
-import { RoleBadge } from '../components/ui/badges';
 import { EmptyState } from '../components/ui/EmptyState';
 import { Input } from '../components/ui/Input';
 import { PageHeader } from '../components/ui/PageHeader';
 import { Select } from '../components/ui/Select';
+import { personTitle } from '../lib/people';
 import { useApiQuery } from '../lib/useApiQuery';
 import { useDebouncedValue } from '../lib/useDebouncedValue';
 
 const ROLE_FILTER = [
-  { value: '', label: 'All roles' },
+  { value: '', label: 'All access levels' },
   ...ROLES.map((value) => ({ value, label: ROLE_LABELS[value] })),
 ];
 
+interface Group {
+  name: string;
+  people: DirectoryUser[];
+}
+
+/** Departments by name, with anyone not yet placed at the end. */
+function groupByDepartment(people: DirectoryUser[]): Group[] {
+  const groups = new Map<string, Group>();
+  for (const person of people) {
+    const name = person.department?.name ?? '';
+    const group = groups.get(name) ?? { name, people: [] };
+    group.people.push(person);
+    groups.set(name, group);
+  }
+  return [...groups.values()].sort((a, b) =>
+    !a.name || !b.name ? Number(!a.name) - Number(!b.name) : a.name.localeCompare(b.name),
+  );
+}
+
 export const DirectoryView: React.FC = () => {
   const [search, setSearch] = useState('');
+  const [department, setDepartment] = useState('');
   const [role, setRole] = useState<Role | ''>('');
   const debouncedSearch = useDebouncedValue(search.trim());
 
   const query = useApiQuery<DirectoryUser[]>(
-    (signal) => listDirectory(debouncedSearch, signal),
-    [debouncedSearch],
+    (signal) => listDirectory(debouncedSearch, department, signal),
+    [debouncedSearch, department],
   );
+  const departments = useApiQuery((signal) => listDepartments(signal), []);
+  const departmentFilter = [
+    { value: '', label: 'All departments' },
+    ...(departments.data ?? []).map(({ id, name }) => ({ value: id, label: name })),
+  ];
 
   const people = useMemo(
     () => (query.data ?? []).filter((person) => !role || person.role === role),
     [query.data, role],
   );
 
+  const groups = useMemo(() => groupByDepartment(people), [people]);
+
   return (
     <>
       <PageHeader title="Team Directory" description="Everyone currently working at Brivent." />
 
-      <div className="mb-4 grid gap-3 sm:grid-cols-[minmax(0,20rem)_12rem]">
+      <div className="mb-4 grid gap-3 sm:grid-cols-[minmax(0,20rem)_12rem_12rem]">
         <Input
           label="Search by name"
           type="search"
@@ -44,7 +72,13 @@ export const DirectoryView: React.FC = () => {
           autoComplete="off"
         />
         <Select
-          label="Role"
+          label="Department"
+          value={department}
+          options={departmentFilter}
+          onChange={(e) => setDepartment(e.target.value)}
+        />
+        <Select
+          label="Access level"
           value={role}
           options={ROLE_FILTER}
           onChange={(e) => setRole(e.target.value as Role | '')}
@@ -60,27 +94,34 @@ export const DirectoryView: React.FC = () => {
             icon="groups"
             title="Nobody found"
             description={
-              debouncedSearch || role
-                ? 'Try a different name or role.'
+              debouncedSearch || department || role
+                ? 'Try a different name or filter.'
                 : 'People will appear here once they join the workspace.'
             }
           />
         }
       >
         {() => (
-          <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-            {people.map((person) => (
-              <li key={person.id} className="card card-pad flex items-center gap-3">
-                <Avatar name={person.name} id={person.id} size="lg" />
-                <div className="min-w-0 grow">
-                  <p className="font-semibold truncate">{person.name}</p>
-                  <div className="mt-1">
-                    <RoleBadge role={person.role} />
-                  </div>
-                </div>
-              </li>
+          <div className="space-y-6">
+            {groups.map((group) => (
+              <section key={group.name} aria-label={group.name || 'No department'}>
+                <h2 className="t-over text-text-2 mb-2">
+                  {group.name || 'No department'} · {group.people.length}
+                </h2>
+                <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                  {group.people.map((person) => (
+                    <li key={person.id} className="card card-pad flex items-center gap-3">
+                      <Avatar name={person.name} id={person.id} size="lg" />
+                      <div className="min-w-0 grow">
+                        <p className="font-semibold truncate">{person.name}</p>
+                        <p className="text-small text-text-2 truncate">{personTitle(person)}</p>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </section>
             ))}
-          </ul>
+          </div>
         )}
       </AsyncState>
     </>
