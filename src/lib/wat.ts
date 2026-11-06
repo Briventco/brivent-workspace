@@ -44,6 +44,12 @@ export function greeting(date: Date = new Date()): string {
   return hour < 17 ? 'Good afternoon' : 'Good evening';
 }
 
+/** Minutes since midnight WAT, for the 11:00 and 18:00 check-in cut-offs. */
+export function watMinutes(date: Date = new Date()): number {
+  const { hour, minute } = parts(date, { hour: '2-digit', minute: '2-digit', hour12: false });
+  return Number(hour) * 60 + Number(minute);
+}
+
 /** Friday, 6 November */
 export function formatLongDate(date: Date = new Date()): string {
   const { weekday, day, month } = parts(date, { weekday: 'long', day: 'numeric', month: 'long' });
@@ -53,6 +59,12 @@ export function formatLongDate(date: Date = new Date()): string {
 /** Mon, 9 Nov */
 export function formatShortDate(date: Date): string {
   const { weekday, day, month } = parts(date, { weekday: 'short', day: 'numeric', month: 'short' });
+  return `${weekday}, ${day} ${month}`;
+}
+
+/** Thursday, 5 Nov */
+export function formatDayHeading(date: Date): string {
+  const { weekday, day, month } = parts(date, { weekday: 'long', day: 'numeric', month: 'short' });
   return `${weekday}, ${day} ${month}`;
 }
 
