@@ -1,6 +1,6 @@
-import { format } from 'date-fns';
 import { Task } from '../api/types';
 import { Action } from './permissions';
+import { formatDateTime as formatWat, fromDateTimeInput, toDateTimeInput } from './wat';
 
 type Can = (action: Action) => boolean;
 
@@ -14,10 +14,8 @@ export function canEditDetails(task: Task, userId: string, can: Can): boolean {
   return can('editAnyTask') || task.createdBy === userId;
 }
 
-export const formatDateTime = (iso: string) => format(new Date(iso), 'd MMM yyyy, HH:mm');
+export const formatDateTime = (iso: string) => formatWat(new Date(iso));
 
-/** The value a datetime-local input expects, in the viewer's own timezone. */
-export const toDeadlineInput = (iso: string | null) =>
-  iso ? format(new Date(iso), "yyyy-MM-dd'T'HH:mm") : '';
+export const toDeadlineInput = (iso: string | null) => (iso ? toDateTimeInput(new Date(iso)) : '');
 
-export const fromDeadlineInput = (value: string) => new Date(value).toISOString();
+export const fromDeadlineInput = (value: string) => fromDateTimeInput(value).toISOString();
