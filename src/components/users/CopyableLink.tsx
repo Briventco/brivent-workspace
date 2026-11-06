@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import { Check, Copy } from 'lucide-react';
 import { useToast } from '../../context/ToastContext';
 import { Button } from '../ui/Button';
 
@@ -17,20 +16,9 @@ export const CopyableLink: React.FC<{ link: string }> = ({ link }) => {
   };
 
   return (
-    <div className="mt-4 flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 p-2 pl-3.5">
-      <code className="flex-1 min-w-0 break-all font-mono text-sm text-slate-900">{link}</code>
-      <Button
-        variant="outline"
-        size="sm"
-        onClick={handleCopy}
-        leftIcon={
-          isCopied ? (
-            <Check className="w-4 h-4" aria-hidden="true" />
-          ) : (
-            <Copy className="w-4 h-4" aria-hidden="true" />
-          )
-        }
-      >
+    <div className="flex items-center gap-2 rounded-md border border-border bg-surface-2 p-2 pl-3">
+      <code className="grow min-w-0 break-all text-small">{link}</code>
+      <Button variant="secondary" size="sm" onClick={handleCopy} icon={isCopied ? 'check' : 'link'}>
         {isCopied ? 'Copied' : 'Copy'}
       </Button>
     </div>

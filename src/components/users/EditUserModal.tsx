@@ -3,10 +3,10 @@ import { ApiError, errorMessage } from '../../api/client';
 import { Role, ROLES, ROLE_LABELS, User } from '../../api/types';
 import { updateUser, UserChanges } from '../../api/users';
 import { useToast } from '../../context/ToastContext';
-import { Alert } from '../ui/Alert';
+import { Banner } from '../ui/Banner';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
-import { Modal } from '../ui/Modal';
+import { Modal, ModalBody, ModalFooter } from '../ui/Modal';
 import { Select } from '../ui/Select';
 
 interface EditUserModalProps {
@@ -71,32 +71,34 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
 
   return (
     <Modal isOpen onClose={isSubmitting ? () => {} : onClose} title="Edit user" description={user.email}>
-      <form onSubmit={handleSubmit} noValidate className="space-y-4">
-        {formError && <Alert>{formError}</Alert>}
-        <Input
-          label="Full name"
-          value={fullName}
-          onChange={(e) => setFullName(e.target.value)}
-          error={nameError}
-          autoComplete="off"
-          data-autofocus
-        />
-        <Select
-          label="Role"
-          value={role}
-          onChange={(e) => setRole(e.target.value as Role)}
-          options={roleOptions}
-          disabled={isSelf}
-          helperText={isSelf ? "You can't change your own role." : undefined}
-        />
-        <div className="pt-2 flex justify-end gap-3">
-          <Button variant="outline" onClick={onClose} disabled={isSubmitting}>
+      <form onSubmit={handleSubmit} noValidate className="contents">
+        <ModalBody>
+          {formError && <Banner>{formError}</Banner>}
+          <Input
+            label="Full name"
+            value={fullName}
+            onChange={(e) => setFullName(e.target.value)}
+            error={nameError}
+            autoComplete="off"
+            data-autofocus
+          />
+          <Select
+            label="Role"
+            value={role}
+            onChange={(e) => setRole(e.target.value as Role)}
+            options={roleOptions}
+            disabled={isSelf}
+            helperText={isSelf ? "You can't change your own role." : undefined}
+          />
+        </ModalBody>
+        <ModalFooter>
+          <Button variant="secondary" onClick={onClose} disabled={isSubmitting}>
             Cancel
           </Button>
           <Button type="submit" isLoading={isSubmitting}>
             Save changes
           </Button>
-        </div>
+        </ModalFooter>
       </form>
     </Modal>
   );

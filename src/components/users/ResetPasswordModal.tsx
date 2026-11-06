@@ -2,9 +2,9 @@ import React, { useState } from 'react';
 import { errorMessage } from '../../api/client';
 import { User } from '../../api/types';
 import { EmailedLinkResult, resetUserPassword } from '../../api/users';
-import { Alert } from '../ui/Alert';
+import { Banner } from '../ui/Banner';
 import { Button } from '../ui/Button';
-import { Modal } from '../ui/Modal';
+import { Modal, ModalBody, ModalFooter } from '../ui/Modal';
 import { EmailResultModal } from './EmailResultModal';
 
 interface ResetPasswordModalProps {
@@ -54,23 +54,21 @@ export const ResetPasswordModal: React.FC<ResetPasswordModalProps> = ({
       title="Reset password?"
       maxWidth="sm"
     >
-      <p className="text-sm text-slate-700">
-        {user.fullName}'s current password will stop working immediately and they'll be signed out
-        everywhere. We'll email them a link to choose a new one.
-      </p>
-      {error && (
-        <div className="mt-4">
-          <Alert>{error}</Alert>
-        </div>
-      )}
-      <div className="mt-6 flex justify-end gap-3">
-        <Button variant="outline" onClick={onClose} disabled={isResetting} data-autofocus>
+      <ModalBody>
+        <p className="text-text-2">
+          {user.fullName}'s current password will stop working immediately and they'll be signed
+          out everywhere. We'll email them a link to choose a new one.
+        </p>
+        {error && <Banner>{error}</Banner>}
+      </ModalBody>
+      <ModalFooter>
+        <Button variant="secondary" onClick={onClose} disabled={isResetting} data-autofocus>
           Cancel
         </Button>
         <Button variant="danger" onClick={handleReset} isLoading={isResetting}>
           Reset password
         </Button>
-      </div>
+      </ModalFooter>
     </Modal>
   );
 };

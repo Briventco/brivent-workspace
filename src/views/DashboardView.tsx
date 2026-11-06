@@ -1,15 +1,14 @@
 import React, { useMemo, useState } from 'react';
-import { AlertTriangle, CalendarClock, Plus } from 'lucide-react';
 import { getTaskSummary, listTasks, TasksPage } from '../api/tasks';
 import { Task, TaskSummary } from '../api/types';
 import { TaskFormModal } from '../components/tasks/TaskFormModal';
-import { TaskPriorityBadge } from '../components/tasks/TaskPriorityBadge';
 import { AsyncState } from '../components/ui/AsyncState';
 import { Button } from '../components/ui/Button';
-import { Card, CardBody, CardHeader } from '../components/ui/Card';
+import { PriorityBadge } from '../components/ui/badges';
+import { Card, CardBody, CardHeader, StatCard } from '../components/ui/Card';
+import { Icon } from '../components/ui/Icon';
 import { PageHeader } from '../components/ui/PageHeader';
 import { useSession } from '../context/AuthContext';
-import { PERMISSIONS } from '../lib/permissions';
 import { Link, navigate } from '../lib/router';
 import { formatDateTime } from '../lib/tasks';
 import { ApiQuery, useApiQuery } from '../lib/useApiQuery';
@@ -19,18 +18,9 @@ const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 const StatCards: React.FC<{ stats: { label: string; value: number; alert?: boolean }[] }> = ({
   stats,
 }) => (
-  <div className="grid gap-3 grid-cols-2 lg:grid-cols-3">
+  <div className="grid gap-4 grid-cols-2 lg:grid-cols-3">
     {stats.map(({ label, value, alert }) => (
-      <div key={label} className="rounded-xl border border-slate-200 bg-white p-4 shadow-xs">
-        <p className="text-sm text-slate-600">{label}</p>
-        <p
-          className={`mt-1 text-2xl font-bold ${
-            alert && value > 0 ? 'text-rose-700' : 'text-slate-900'
-          }`}
-        >
-          {value}
-        </p>
-      </div>
+      <StatCard key={label} label={label} value={value} attention={alert && value > 0} />
     ))}
   </div>
 );
@@ -40,7 +30,7 @@ const SummarySection: React.FC<{ title: string; children: React.ReactNode }> = (
   children,
 }) => (
   <section className="mb-6">
-    <h2 className="mb-3 text-base font-semibold text-slate-900">{title}</h2>
+    <h2 className="mb-3 t-h2">{title}</h2>
     {children}
   </section>
 );
@@ -79,17 +69,17 @@ const ManagerCounts: React.FC = () => {
 };
 
 const TaskLinks: React.FC<{ tasks: Task[] }> = ({ tasks }) => (
-  <ul className="divide-y divide-slate-200">
+  <ul className="divide-y divide-border">
     {tasks.map((task) => (
       <li key={task.id} className="px-5 py-3">
         <Link
           to={`/tasks/${task.id}`}
-          className="block text-sm font-medium text-slate-900 hover:text-brivent-700 break-words rounded"
+          className="block font-semibold text-text break-words rounded"
         >
           {task.title}
         </Link>
-        <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-slate-600">
-          <TaskPriorityBadge priority={task.priority} />
+        <div className="mt-1 flex flex-wrap items-center gap-2 text-small text-text-2">
+          <PriorityBadge priority={task.priority} />
           {task.deadline && <span>{formatDateTime(task.deadline)}</span>}
         </div>
       </li>
@@ -105,7 +95,7 @@ const TaskPanel: React.FC<{
 }> = ({ title, emptyText, icon, query }) => (
   <Card>
     <CardHeader>
-      <h2 className="flex items-center gap-2 text-base font-semibold text-slate-900">
+      <h2 className="flex items-center gap-2 t-h2">
         {icon}
         {title}
       </h2>
@@ -114,7 +104,7 @@ const TaskPanel: React.FC<{
       query={query}
       loadingLabel="Loading tasks…"
       isEmpty={(data) => data.tasks.length === 0}
-      empty={<CardBody className="text-sm text-slate-600">{emptyText}</CardBody>}
+      empty={<CardBody className="text-text-2">{emptyText}</CardBody>}
     >
       {({ tasks }) => <TaskLinks tasks={tasks} />}
     </AsyncState>
@@ -122,8 +112,8 @@ const TaskPanel: React.FC<{
 );
 
 const TaskDashboard: React.FC = () => {
-  const { hasPermission } = useSession();
-  const isManager = hasPermission(PERMISSIONS.TASKS_VIEW_ALL);
+  const { can } = useSession();
+  const isManager = can('viewAllTasks');
 
   const summary = useApiQuery<TaskSummary>(getTaskSummary, []);
 
@@ -170,13 +160,13 @@ const TaskDashboard: React.FC = () => {
         <TaskPanel
           title="My tasks due soon"
           emptyText="Nothing due in the next 7 days."
-          icon={<CalendarClock className="w-4 h-4 text-brivent-600" aria-hidden="true" />}
+          icon={<Icon name="today" className="text-brand" />}
           query={dueSoon}
         />
         <TaskPanel
           title="Overdue"
           emptyText="You're all caught up."
-          icon={<AlertTriangle className="w-4 h-4 text-rose-600" aria-hidden="true" />}
+          icon={<Icon name="schedule" className="text-danger" />}
           query={overdue}
         />
       </div>
@@ -185,7 +175,7 @@ const TaskDashboard: React.FC = () => {
 };
 
 export const DashboardView: React.FC = () => {
-  const { user, hasPermission } = useSession();
+  const { user, can } = useSession();
   const [isCreating, setIsCreating] = useState(false);
   const firstName = user.fullName.trim().split(/\s+/)[0];
 
@@ -194,18 +184,15 @@ export const DashboardView: React.FC = () => {
       <PageHeader
         title={`Welcome, ${firstName}`}
         actions={
-          hasPermission(PERMISSIONS.TASKS_CREATE) && (
-            <Button
-              onClick={() => setIsCreating(true)}
-              leftIcon={<Plus className="w-4 h-4" aria-hidden="true" />}
-            >
+          can('createTask') && (
+            <Button icon="add" onClick={() => setIsCreating(true)}>
               New task
             </Button>
           )
         }
       />
 
-      {hasPermission(PERMISSIONS.TASKS_VIEW_OWN) && <TaskDashboard />}
+      {can('viewOwnTasks') && <TaskDashboard />}
 
       {isCreating && (
         <TaskFormModal

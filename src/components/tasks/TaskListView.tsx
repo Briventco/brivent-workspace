@@ -1,12 +1,10 @@
 import React from 'react';
-import { AlertTriangle, Calendar, UserRound } from 'lucide-react';
+import { Icon } from '../ui/Icon';
 import { STATUS_LABELS, Task, TASK_STATUSES, TaskStatus } from '../../api/types';
 import { Link } from '../../lib/router';
 import { formatDateTime } from '../../lib/tasks';
-import { Badge } from '../ui/Badge';
+import { PriorityBadge, StatusBadge } from '../ui/badges';
 import { Select } from '../ui/Select';
-import { TaskPriorityBadge } from './TaskPriorityBadge';
-import { TaskStatusBadge } from './TaskStatusBadge';
 
 const STATUS_OPTIONS = TASK_STATUSES.map((value) => ({ value, label: STATUS_LABELS[value] }));
 
@@ -23,37 +21,35 @@ export const TaskListView: React.FC<TaskListViewProps> = ({
   onStatusChange,
   busyTaskId,
 }) => (
-  <ul className="divide-y divide-slate-200">
+  <ul className="divide-y divide-border">
     {tasks.map((task) => (
       <li
         key={task.id}
-        className={`px-4 sm:px-5 py-3.5 flex flex-col gap-3 sm:flex-row sm:items-center ${
-          task.isOverdue ? 'bg-rose-50/60' : ''
-        }`}
+        className="px-4 sm:px-5 py-3 flex flex-col gap-3 sm:flex-row sm:items-center"
       >
         <div className="flex-1 min-w-0">
           <Link
             to={`/tasks/${task.id}`}
-            className="block font-medium text-slate-900 hover:text-brivent-700 break-words rounded"
+            className="block font-semibold text-text break-words rounded"
           >
             {task.title}
           </Link>
-          <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-sm text-slate-600">
-            <TaskPriorityBadge priority={task.priority} />
+          <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-small text-text-2">
+            <PriorityBadge priority={task.priority} />
             {task.isOverdue && (
-              <Badge variant="danger" size="sm">
-                <AlertTriangle className="w-3 h-3" aria-hidden="true" />
+              <span className="overdue">
+                <Icon name="schedule" size="sm" />
                 Overdue
-              </Badge>
+              </span>
             )}
             {task.deadline && (
               <span className="inline-flex items-center gap-1.5">
-                <Calendar className="w-3.5 h-3.5" aria-hidden="true" />
+                <Icon name="calendar_today" size="sm" />
                 {formatDateTime(task.deadline)}
               </span>
             )}
             <span className="inline-flex items-center gap-1.5">
-              <UserRound className="w-3.5 h-3.5" aria-hidden="true" />
+              <Icon name="person" size="sm" />
               {task.assignee?.name ?? 'Unassigned'}
             </span>
           </div>
@@ -70,7 +66,7 @@ export const TaskListView: React.FC<TaskListViewProps> = ({
               onChange={(e) => onStatusChange(task, e.target.value as TaskStatus)}
             />
           ) : (
-            <TaskStatusBadge status={task.status} />
+            <StatusBadge status={task.status} />
           )}
         </div>
       </li>

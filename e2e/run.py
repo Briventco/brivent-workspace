@@ -4,6 +4,7 @@ import os
 import re
 import sys
 import time
+import urllib.error
 import urllib.request
 from pathlib import Path
 
@@ -20,6 +21,9 @@ PASSWORD = "e2e-brand-new-passphrase"
 SECOND_PASSWORD = "e2e-another-new-passphrase"
 MOBILE = {"width": 375, "height": 720}
 LAPTOP = {"width": 1366, "height": 800}
+WIDE = {"width": 1440, "height": 900}
+NARROW = {"width": 1100, "height": 800}
+GALLERY = f"{APP}/design-system"
 # Pages built from this list; each must load at phone width without sideways scrolling.
 PAGES = ["/", "/tasks", "/directory", "/settings"]
 
@@ -139,7 +143,7 @@ def expect_url_is(page, path):
 
 def invite(admin, name, email):
     admin.goto(f"{APP}/users")
-    admin.get_by_role("button", name="Add user").click()
+    admin.get_by_role("button", name="Invite user").click()
     dialog = admin.get_by_role("dialog")
     dialog.get_by_label("Full name").fill(name)
     dialog.get_by_label("Work email").fill(email)
@@ -191,11 +195,13 @@ def main():
         browser = playwright.chromium.launch(executable_path=executable or None)
         page = new_page(browser)
         try:
+            run_foundations(browser)
             run_public_pages(browser)
             run_admin(browser, page, admin_task, throwaway_task, intern_name)
             if DESTRUCTIVE and BACKEND_LOG:
                 run_invites(browser, page)
             run_team_lead(browser, lead_task, lead_name, intern_name)
+            run_permissions(lead_email, lead_password)
             run_intern(browser, lead_task, admin_task)
             for role in ("SUPER_ADMIN", "TEAM_LEAD", "INTERN"):
                 step(f"{role}: every page fits 375px", lambda: check_mobile(browser, role))
@@ -212,6 +218,199 @@ def main():
     passed = sum(ok for ok, _ in results)
     print(f"\n{passed} passed, {len(results) - passed} failed, {len(console_problems)} console problem(s)")
     sys.exit(0 if passed == len(results) and not console_problems else 1)
+
+
+def rgb(color):
+    return "rgb({}, {}, {})".format(*(int(color[i:i + 2], 16) for i in (1, 3, 5)))
+
+
+def open_gallery(browser, viewport=LAPTOP, **context):
+    page = browser.new_context(viewport=viewport, **context).new_page()
+    page.on("pageerror", lambda error: console_problems.append(f"pageerror: {error}"))
+    page.goto(GALLERY)
+    page.get_by_role("heading", name="Workspace design system").wait_for()
+    return page
+
+
+def run_foundations(browser):
+    """Needs the dev server: the /design-system gallery isn't in production builds."""
+    page = open_gallery(browser)
+
+    def tokens():
+        expected = json.loads((REPO / "src/assets/brivent/tokens/tokens.json").read_text())["light"]
+        actual = page.evaluate(
+            """names => {
+                const style = getComputedStyle(document.documentElement);
+                return names.map(name => style.getPropertyValue('--' + name).trim());
+            }""",
+            list(expected),
+        )
+        wrong = [
+            name for name, value in zip(expected, actual)
+            if value.lower() != str(expected[name]).lower()
+        ]
+        assert not wrong, f"tokens differ from the design: {wrong}"
+    step("Foundations: every light token matches the design's tokens.json", tokens)
+
+    def fonts_and_colours():
+        body = page.evaluate(
+            """() => {
+                const style = getComputedStyle(document.body);
+                return { font: style.fontFamily, color: style.color };
+            }"""
+        )
+        assert body["font"].startswith('Inter'), body["font"]
+        assert body["color"] == rgb("#0D0E2B"), body["color"]
+        assert page.evaluate("document.fonts.ready.then(() => document.fonts.check('600 14px Inter'))")
+        button = page.get_by_role("button", name="New task")
+        expect(button).to_have_css("background-color", rgb("#152BF9"))
+        expect(button).to_have_css("height", "36px")
+    step("Foundations: Inter loads, and buttons use the brand colour at 36px", fonts_and_colours)
+
+    def icons():
+        blank = page.evaluate("[...document.querySelectorAll('.ms')].filter(i => !i.querySelector('svg')).length")
+        total = page.evaluate("document.querySelectorAll('.ms svg').length")
+        assert total > 20 and blank == 0, f"{total} icons, {blank} blank"
+    step("Foundations: every icon resolves to a real SVG", icons)
+
+    def focus_ring():
+        page.get_by_role("button", name="Cancel").first.focus()
+        page.keyboard.press("Tab")
+        ring = page.evaluate("getComputedStyle(document.activeElement).boxShadow")
+        assert rgb("#152BF9").replace("rgb", "") in ring.replace("rgb", ""), ring
+    step("Foundations: keyboard focus shows the brand ring", focus_ring)
+
+    def loading_button():
+        expect(page.get_by_text("Sending invite")).to_be_visible()
+        loading = page.locator('button[aria-busy="true"]')
+        expect(loading).to_be_disabled()
+    step("Button: loading shows a progress word and can't be pressed twice", loading_button)
+
+    def reveal():
+        field = page.get_by_label("Password", exact=True)
+        expect(field).to_have_attribute("type", "password")
+        page.get_by_role("button", name="Show characters").click()
+        expect(field).to_have_attribute("type", "text")
+        page.get_by_role("button", name="Hide characters").click()
+        expect(field).to_have_attribute("type", "password")
+        expect(page.get_by_text("Use at least 12 characters.")).to_be_visible()
+    step("Input: password reveal and error message", reveal)
+
+    def switch():
+        toggle = page.get_by_role("switch", name="WhatsApp alerts")
+        toggle.focus()
+        page.keyboard.press("Space")
+        expect(toggle).to_have_attribute("aria-checked", "false")
+        page.keyboard.press("Enter")
+        expect(toggle).to_have_attribute("aria-checked", "true")
+        expect(page.get_by_role("switch", name="Email digest")).to_be_disabled()
+    step("Switch: works by keyboard, and disabled stays disabled", switch)
+
+    def tabs_and_chips():
+        tabs = page.get_by_role("tablist", name="Task views")
+        tabs.get_by_role("tab", name="My tasks").focus()
+        page.keyboard.press("ArrowRight")
+        expect(tabs.get_by_role("tab", name="Tasks I assigned")).to_be_focused()
+        expect(tabs.get_by_role("tab", name="Tasks I assigned")).to_have_attribute("aria-selected", "true")
+        page.keyboard.press("ArrowLeft")
+        page.keyboard.press("ArrowLeft")
+        expect(tabs.get_by_role("tab", name="All tasks")).to_have_attribute("aria-selected", "true")
+
+        chip = page.get_by_role("button", name="Overdue")
+        expect(chip).to_have_attribute("aria-pressed", "true")
+        chip.click()
+        expect(chip).to_have_attribute("aria-pressed", "false")
+
+        view = page.get_by_role("group", name="View")
+        view.get_by_role("button", name="Board").click()
+        expect(view.get_by_role("button", name="Board")).to_have_attribute("aria-pressed", "true")
+    step("Tabs, Chip, view switch: arrows wrap, and state is announced", tabs_and_chips)
+
+    def table():
+        row = page.get_by_role("row", name=re.compile("Design the Friday post"))
+        row.focus()
+        page.keyboard.press("Enter")
+        expect(row).to_have_attribute("aria-selected", "true")
+        expect(row).to_have_css("height", "56px")
+        other = page.get_by_role("row", name=re.compile("Fix order sync delay"))
+        other.click()
+        expect(other).to_have_attribute("aria-selected", "true")
+    step("Table: rows are 56px and open by click or Enter", table)
+
+    def toasts():
+        page.get_by_role("button", name="Show error toast").click()
+        toast = page.get_by_role("alert").filter(has_text="Couldn't save your changes")
+        expect(toast.get_by_text("Your text is still here.")).to_be_visible()
+        toast.get_by_role("button", name="Try again").click()
+        expect(page.get_by_role("status").filter(has_text="Saved")).to_be_visible()
+        expect(toast).to_have_count(0)
+        page.get_by_role("button", name="Show success toast").click()
+        success = page.get_by_role("status").filter(has_text="Invite sent to Yusuf Garba")
+        success.get_by_role("button", name="Dismiss notification").click()
+        expect(success).to_have_count(0)
+    step("Toast: description, action, dismiss", toasts)
+
+    def modal():
+        opener = page.get_by_role("button", name="Open modal")
+        opener.click()
+        dialog = page.get_by_role("dialog", name="Deactivate Emeka Obi?")
+        expect(dialog.get_by_label("Reason")).to_be_focused()
+        for _ in range(8):
+            page.keyboard.press("Tab")
+            assert page.evaluate("!!document.activeElement.closest('[role=dialog]')"), "focus left the modal"
+        page.keyboard.press("Escape")
+        expect(dialog).to_have_count(0)
+        expect(opener).to_be_focused()
+    step("Modal: focus moves in, stays in, Esc closes, focus returns", modal)
+    page.context.close()
+
+    def panel(viewport, scrim, width):
+        view = open_gallery(browser, viewport)
+        view.get_by_role("button", name="Open side panel").click()
+        dialog = view.get_by_role("dialog", name="Task title sits here")
+        expect(dialog).to_be_visible()
+        box = dialog.bounding_box()
+        assert round(box["width"]) == width, box
+        expect(view.locator(".panel-scrim")).to_have_count(1 if scrim else 0)
+        expect_no_sideways_scroll(view, "side panel")
+        view.keyboard.press("Escape")
+        expect(dialog).to_have_count(0)
+        view.context.close()
+    step("Side panel: 480px with no scrim at 1440", lambda: panel(WIDE, False, 480))
+    step("Side panel: scrim under 1280", lambda: panel(NARROW, True, 480))
+    step("Side panel: full screen at 375", lambda: panel(MOBILE, True, 375))
+
+    def phone():
+        view = open_gallery(browser, MOBILE)
+        expect_no_sideways_scroll(view, "gallery")
+        expect(view.get_by_role("button", name="New task")).to_have_css("height", "44px")
+        expect(view.get_by_role("button", name="Save", exact=True)).to_have_css("height", "44px")
+        view.get_by_role("button", name="Open modal").click()
+        box = view.get_by_role("dialog").bounding_box()
+        assert round(box["width"]) == 375 and round(box["height"]) == 720, box
+        view.context.close()
+    step("Phone: 44px buttons, no sideways scroll, full screen modal", phone)
+
+    def skeleton():
+        view = open_gallery(browser, reduced_motion="reduce")
+        view.locator(".sk").first.wait_for()
+        name = view.locator(".sk").first.evaluate("el => getComputedStyle(el).animationName")
+        assert name == "none", name
+        view.context.close()
+    step("Skeleton: appears after the delay, shimmer off with reduced motion", skeleton)
+
+
+def run_permissions(lead_email, lead_password):
+    def server_refuses():
+        session = call("POST", "/auth/login", body={"email": lead_email, "password": lead_password})
+        assert "tasks.delete" not in session["user"]["permissions"]
+        try:
+            call("DELETE", "/tasks/00000000-0000-4000-8000-000000000000", session["token"])
+        except urllib.error.HTTPError as error:
+            assert error.code == 403, error.code
+        else:
+            raise AssertionError("delete was allowed")
+    step("Team Lead: the API refuses delete too, matching the hidden button", server_refuses)
 
 
 def run_admin(browser, page, title, throwaway, intern_name):
@@ -257,10 +456,10 @@ def run_admin(browser, page, title, throwaway, intern_name):
 
     def views():
         open_nav_link(page, "My Tasks")
-        group = page.get_by_role("group", name="Task views")
+        group = page.get_by_role("tablist", name="Task views")
         for label in ("My tasks", "Tasks I assigned", "Unassigned", "All tasks"):
-            expect(group.get_by_role("button", name=label)).to_be_visible()
-        group.get_by_role("button", name="Tasks I assigned").click()
+            expect(group.get_by_role("tab", name=label)).to_be_visible()
+        group.get_by_role("tab", name="Tasks I assigned").click()
         expect(page.get_by_role("link", name=title)).to_be_visible()
     step("Super Admin: all four task views, and the task under Tasks I assigned", views)
 
@@ -352,7 +551,7 @@ def run_invites(browser, admin):
 
     def add_user():
         open_nav_link(admin, "User Management")
-        admin.get_by_role("button", name="Add user").click()
+        admin.get_by_role("button", name="Invite user").click()
         dialog = admin.get_by_role("dialog")
         expect(dialog.get_by_label("Temporary password")).to_have_count(0)
         expect(dialog.locator("input[type=password]")).to_have_count(0)
@@ -367,7 +566,7 @@ def run_invites(browser, admin):
 
     def pending_row():
         row = admin.get_by_role("row", name=re.compile(re.escape(name)))
-        expect(row.get_by_text("Pending", exact=True)).to_be_visible()
+        expect(row.get_by_text("Pending invite", exact=True)).to_be_visible()
         expect(row.get_by_role("button", name=f"Resend invite to {name}")).to_be_visible()
         expect(row.get_by_role("button", name=f"Reset password for {name}")).to_have_count(0)
         expect(row.get_by_role("button", name=f"Deactivate {name}")).to_be_visible()
@@ -538,7 +737,7 @@ def run_invites(browser, admin):
         for path in ("/users", "/users/*/resend-invite", "/users/*/reset-password"):
             admin.route(f"{api_url()}{path}", fail_email)
         name4, email4 = f"E2E Fail {RUN}", f"e2e.fail.{RUN}@example.test"
-        admin.get_by_role("button", name="Add user").click()
+        admin.get_by_role("button", name="Invite user").click()
         dialog = admin.get_by_role("dialog")
         dialog.get_by_label("Full name").fill(name4)
         dialog.get_by_label("Work email").fill(email4)
@@ -563,7 +762,7 @@ def run_invites(browser, admin):
         admin.get_by_role("button", name=f"Reactivate {name5}").click()
         admin.get_by_role("dialog").get_by_role("button", name="Reactivate").click()
         expect(admin.get_by_text("is pending again")).to_be_visible()
-        expect(row.get_by_text("Pending", exact=True)).to_be_visible()
+        expect(row.get_by_text("Pending invite", exact=True)).to_be_visible()
     step("Pending user: deactivate, then reactivate returns them to Pending", deactivate_pending)
     fresh.context.close()
 
@@ -582,7 +781,7 @@ def run_team_lead(browser, title, lead_name, intern_name):
         create_task(page, title, intern_name)
         expect(page.get_by_role("button", name="Delete")).to_have_count(0)
         open_nav_link(page, "My Tasks")
-        page.get_by_role("group", name="Task views").get_by_role("button", name="Tasks I assigned").click()
+        page.get_by_role("tablist", name="Task views").get_by_role("tab", name="Tasks I assigned").click()
         expect(page.get_by_role("link", name=title)).to_be_visible()
     step("Team Lead: directory search, assign, then Tasks I assigned, no Delete", full_flow)
 
@@ -605,11 +804,11 @@ def run_intern(browser, assigned_title, admin_title):
 
     def my_tasks():
         open_nav_link(page, "My Tasks")
-        expect(page.get_by_role("group", name="Task views")).to_have_count(0)
+        expect(page.get_by_role("tablist", name="Task views")).to_have_count(0)
         expect(page.get_by_role("link", name=assigned_title)).to_be_visible()
         expect(page.get_by_role("link", name=admin_title)).to_be_visible()
         page.get_by_label(f"Status of {assigned_title}").select_option("IN_PROGRESS")
-        expect(page.get_by_text("Moved to In Progress.")).to_be_visible()
+        expect(page.get_by_text("Moved to In progress.")).to_be_visible()
     step("Intern: sees assigned tasks, no manager tabs, changes status inline", my_tasks)
 
     def detail():

@@ -4,7 +4,7 @@ import { useAuth } from '../../context/AuthContext';
 import { goToLogin } from '../../lib/loginHandoff';
 import { Link } from '../../lib/router';
 import { validateNewPassword } from '../../lib/validation';
-import { Alert } from '../ui/Alert';
+import { Banner } from '../ui/Banner';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
 
@@ -31,9 +31,9 @@ interface LinkPasswordFormProps {
 
 const DeadEnd: React.FC<{ children: React.ReactNode }> = ({ children }) => (
   <div className="space-y-4">
-    <Alert>{children}</Alert>
-    <p className="text-sm text-center">
-      <Link to="/login" className="font-medium text-brivent-700 hover:underline rounded">
+    <Banner>{children}</Banner>
+    <p className="text-body text-center">
+      <Link to="/login" className="font-semibold rounded">
         Back to sign in
       </Link>
     </p>
@@ -91,7 +91,7 @@ export const LinkPasswordForm: React.FC<LinkPasswordFormProps> = ({
 
   return (
     <form onSubmit={handleSubmit} noValidate className="space-y-4">
-      {formError && <Alert>{formError}</Alert>}
+      {formError && <Banner>{formError}</Banner>}
       <Input
         label="New password"
         type="password"
@@ -110,7 +110,7 @@ export const LinkPasswordForm: React.FC<LinkPasswordFormProps> = ({
         onChange={(e) => setConfirmPassword(e.target.value)}
         error={errors.confirmPassword}
       />
-      <Button type="submit" className="w-full" isLoading={isSubmitting}>
+      <Button type="submit" block isLoading={isSubmitting}>
         {submitLabel}
       </Button>
     </form>

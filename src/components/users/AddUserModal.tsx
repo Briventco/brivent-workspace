@@ -3,10 +3,10 @@ import { ApiError, errorMessage } from '../../api/client';
 import { Role, ROLES, ROLE_LABELS } from '../../api/types';
 import { createUser, EmailedLinkResult } from '../../api/users';
 import { validateEmail } from '../../lib/validation';
-import { Alert } from '../ui/Alert';
+import { Banner } from '../ui/Banner';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
-import { Modal } from '../ui/Modal';
+import { Modal, ModalBody, ModalFooter } from '../ui/Modal';
 import { Select } from '../ui/Select';
 import { EmailResultModal } from './EmailResultModal';
 
@@ -84,41 +84,43 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
     <Modal
       isOpen
       onClose={isSubmitting ? () => {} : onClose}
-      title="Add user"
+      title="Invite someone"
       description="They'll get an email with a link to set their own password."
     >
-      <form onSubmit={handleSubmit} noValidate className="space-y-4">
-        {formError && <Alert>{formError}</Alert>}
-        <Input
-          label="Full name"
-          value={fullName}
-          onChange={(e) => setFullName(e.target.value)}
-          error={errors.fullName}
-          autoComplete="off"
-          data-autofocus
-        />
-        <Input
-          label="Work email"
-          type="email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          error={errors.email}
-          autoComplete="off"
-        />
-        <Select
-          label="Role"
-          value={role}
-          onChange={(e) => setRole(e.target.value as Role)}
-          options={roleOptions}
-        />
-        <div className="pt-2 flex justify-end gap-3">
-          <Button variant="outline" onClick={onClose} disabled={isSubmitting}>
+      <form onSubmit={handleSubmit} noValidate className="contents">
+        <ModalBody>
+          {formError && <Banner>{formError}</Banner>}
+          <Input
+            label="Full name"
+            value={fullName}
+            onChange={(e) => setFullName(e.target.value)}
+            error={errors.fullName}
+            autoComplete="off"
+            data-autofocus
+          />
+          <Input
+            label="Work email"
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            error={errors.email}
+            autoComplete="off"
+          />
+          <Select
+            label="Role"
+            value={role}
+            onChange={(e) => setRole(e.target.value as Role)}
+            options={roleOptions}
+          />
+        </ModalBody>
+        <ModalFooter>
+          <Button variant="secondary" onClick={onClose} disabled={isSubmitting}>
             Cancel
           </Button>
           <Button type="submit" isLoading={isSubmitting}>
             Send invite
           </Button>
-        </div>
+        </ModalFooter>
       </form>
     </Modal>
   );

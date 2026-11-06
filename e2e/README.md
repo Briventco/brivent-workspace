@@ -1,6 +1,6 @@
 # End-to-end checks
 
-Drives the app in a real browser as a Super Admin, a Team Lead and an Intern.
+Drives the app in a real browser as a Super Admin, a Team Lead and an Intern. It also checks every core component on `/design-system`, a gallery that only exists on the dev server, so run it against `npm run dev` rather than a production build.
 
 ## Setup
 

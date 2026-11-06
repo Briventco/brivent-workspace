@@ -4,12 +4,11 @@ import { createTask, TaskChanges, updateTask } from '../../api/tasks';
 import { PersonRef, PRIORITY_LABELS, Task, TASK_PRIORITIES, TaskPriority } from '../../api/types';
 import { useSession } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
-import { PERMISSIONS } from '../../lib/permissions';
 import { canEditDetails, fromDeadlineInput, toDeadlineInput } from '../../lib/tasks';
-import { Alert } from '../ui/Alert';
+import { Banner } from '../ui/Banner';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
-import { Modal } from '../ui/Modal';
+import { Modal, ModalBody, ModalFooter } from '../ui/Modal';
 import { Select } from '../ui/Select';
 import { Textarea } from '../ui/Textarea';
 import { AssigneePicker } from './AssigneePicker';
@@ -27,7 +26,7 @@ const PRIORITY_OPTIONS = TASK_PRIORITIES.map((value) => ({
 }));
 
 export const TaskFormModal: React.FC<TaskFormModalProps> = ({ task, onClose, onSaved }) => {
-  const { user, hasPermission } = useSession();
+  const { user, can } = useSession();
   const toast = useToast();
 
   const [title, setTitle] = useState(task?.title ?? '');
@@ -42,9 +41,9 @@ export const TaskFormModal: React.FC<TaskFormModalProps> = ({ task, onClose, onS
   const [pickerRefresh, setPickerRefresh] = useState(0);
 
   // The backend refuses the whole save if any field isn't allowed, so only show what is.
-  const canEdit = !task || canEditDetails(task, user.id, hasPermission);
+  const canEdit = !task || canEditDetails(task, user.id, can);
   const canAssign =
-    hasPermission(PERMISSIONS.TASKS_ASSIGN) && hasPermission(PERMISSIONS.DIRECTORY_VIEW);
+    can('assignTask') && can('viewDirectory');
 
   const save = (): Promise<Task | null> => {
     if (!task) {
@@ -77,10 +76,10 @@ export const TaskFormModal: React.FC<TaskFormModalProps> = ({ task, onClose, onS
     setFormError('');
 
     const nextErrors = {
-      title: canEdit && !title.trim() ? 'Give the task a title.' : undefined,
+      title: canEdit && !title.trim() ? 'Give the task a short title.' : undefined,
       deadline:
         !task && deadline && new Date(deadline) < new Date()
-          ? 'Choose a time in the future.'
+          ? 'That date has passed. Pick today or later.'
           : undefined,
     };
     setErrors(nextErrors);
@@ -117,65 +116,67 @@ export const TaskFormModal: React.FC<TaskFormModalProps> = ({ task, onClose, onS
       title={task ? 'Edit task' : 'New task'}
       maxWidth="lg"
     >
-      <form onSubmit={handleSubmit} noValidate className="space-y-4">
-        {formError && <Alert>{formError}</Alert>}
+      <form onSubmit={handleSubmit} noValidate className="contents">
+        <ModalBody>
+          {formError && <Banner>{formError}</Banner>}
 
-        {canEdit && (
-          <>
-            <Input
-              label="Title"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              error={errors.title}
-              maxLength={200}
-              autoComplete="off"
-              data-autofocus
-            />
-            <Textarea
-              label="Description"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              maxLength={10000}
-              rows={4}
-            />
-            <div className="grid gap-4 sm:grid-cols-2">
-              <Select
-                label="Priority"
-                value={priority}
-                onChange={(e) => setPriority(e.target.value as TaskPriority)}
-                options={PRIORITY_OPTIONS}
-              />
+          {canEdit && (
+            <>
               <Input
-                label="Deadline"
-                type="datetime-local"
-                value={deadline}
-                onChange={(e) => setDeadline(e.target.value)}
-                error={errors.deadline}
+                label="Title"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                error={errors.title}
+                maxLength={200}
+                autoComplete="off"
+                data-autofocus
               />
-            </div>
-          </>
-        )}
+              <Textarea
+                label="Description"
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                maxLength={10000}
+                rows={4}
+              />
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Select
+                  label="Priority"
+                  value={priority}
+                  onChange={(e) => setPriority(e.target.value as TaskPriority)}
+                  options={PRIORITY_OPTIONS}
+                />
+                <Input
+                  label="Deadline"
+                  type="datetime-local"
+                  value={deadline}
+                  onChange={(e) => setDeadline(e.target.value)}
+                  error={errors.deadline}
+                />
+              </div>
+            </>
+          )}
 
-        {canAssign && (
-          <AssigneePicker
-            value={assignee}
-            onChange={(person) => {
-              setAssignee(person);
-              setErrors((current) => ({ ...current, assignee: undefined }));
-            }}
-            error={errors.assignee}
-            refreshKey={pickerRefresh}
-          />
-        )}
+          {canAssign && (
+            <AssigneePicker
+              value={assignee}
+              onChange={(person) => {
+                setAssignee(person);
+                setErrors((current) => ({ ...current, assignee: undefined }));
+              }}
+              error={errors.assignee}
+              refreshKey={pickerRefresh}
+            />
+          )}
 
-        <div className="pt-2 flex justify-end gap-3">
-          <Button variant="outline" onClick={onClose} disabled={isSubmitting}>
+        </ModalBody>
+        <ModalFooter>
+          <Button variant="secondary" onClick={onClose} disabled={isSubmitting}>
             Cancel
           </Button>
           <Button type="submit" isLoading={isSubmitting}>
             {task ? 'Save changes' : 'Create task'}
           </Button>
-        </div>
+        </ModalFooter>
       </form>
     </Modal>
   );

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { errorMessage } from '../api/client';
 import { AuthLayout } from '../components/auth/AuthLayout';
-import { Alert } from '../components/ui/Alert';
+import { Banner } from '../components/ui/Banner';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { useAuth } from '../context/AuthContext';
@@ -44,8 +44,8 @@ export const LoginView: React.FC = () => {
   return (
     <AuthLayout title="Brivent Workspace" subtitle="Sign in with your work account">
       <form onSubmit={handleSubmit} noValidate className="space-y-4">
-        {notice && <Alert tone="success">{notice}</Alert>}
-        {formError && <Alert>{formError}</Alert>}
+        {notice && <Banner tone="success">{notice}</Banner>}
+        {formError && <Banner>{formError}</Banner>}
         <Input
           label="Work email"
           type="email"
@@ -64,11 +64,11 @@ export const LoginView: React.FC = () => {
           onChange={(e) => setPassword(e.target.value)}
           error={errors.password}
         />
-        <Button type="submit" className="w-full" isLoading={isSubmitting}>
+        <Button type="submit" block isLoading={isSubmitting}>
           Sign in
         </Button>
-        <p className="text-sm text-center">
-          <Link to="/forgot-password" className="font-medium text-brivent-700 hover:underline rounded">
+        <p className="text-body text-center">
+          <Link to="/forgot-password" className="font-semibold rounded">
             Forgot password?
           </Link>
         </p>
