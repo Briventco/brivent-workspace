@@ -16,6 +16,7 @@ export type TaskView = 'mine' | 'assigned' | 'unassigned' | 'all';
 export interface TaskFilters {
   status?: TaskStatus;
   assigneeId?: string;
+  projectId?: string;
   priority?: TaskPriority;
   overdue?: boolean;
   dueAfter?: string;
@@ -36,6 +37,7 @@ export interface NewTask {
   priority: TaskPriority;
   deadline?: string;
   assigneeId?: string;
+  projectId?: string;
 }
 
 export interface TaskChanges {
@@ -44,6 +46,7 @@ export interface TaskChanges {
   priority?: TaskPriority;
   deadline?: string | null;
   assigneeId?: string | null;
+  projectId?: string | null;
 }
 
 const VIEW_PATHS: Record<TaskView, string> = {
@@ -73,7 +76,7 @@ export async function listTasks(
 const MAX_LIMIT = 100;
 
 /** Every page of a list, for totals the API doesn't give directly. */
-async function listEveryTask(
+export async function listEveryTask(
   view: TaskView,
   filters: TaskFilters,
   signal?: AbortSignal,

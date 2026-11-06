@@ -69,6 +69,9 @@ const OverdueCard: React.FC<{ query: ApiQuery<Task[]> }> = ({ query }) => {
                           <Link to={`/tasks/${task.id}`} className="font-semibold text-text">
                             {task.title}
                           </Link>
+                          {task.project && (
+                            <span className="block text-small text-text-2">{task.project.name}</span>
+                          )}
                         </td>
                         <td>
                           {task.assignee ? (
@@ -215,6 +218,7 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ summary, onC
   );
 
   const blocked = openTasks.data?.filter((task) => task.status === 'BLOCKED').length;
+  const projectCount = new Set(openTasks.data?.map((task) => task.projectId).filter(Boolean)).size;
   const checkinTotal = teamCheckins ? teamCheckins.submitted + teamCheckins.notSubmitted : 0;
   const showMissing = hasCheckins && !isWeekend();
 
@@ -242,7 +246,7 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ summary, onC
         label="Open"
         icon="radio_button_unchecked"
         value={summary.open}
-        hint="Across the team"
+        hint={projectCount ? `Across ${plural(projectCount, 'project')}` : 'Across the team'}
         to={`${TASKS}&preset=open`}
         className="hidden md:flex"
       />

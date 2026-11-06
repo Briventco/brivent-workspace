@@ -14,6 +14,11 @@ export function canEditDetails(task: Task, userId: string, can: Can): boolean {
   return can('editAnyTask') || task.createdBy === userId;
 }
 
+export function canComment(task: Task, userId: string, can: Can): boolean {
+  if (!can('commentOnTask')) return false;
+  return can('viewAllTasks') || task.assigneeId === userId || task.createdBy === userId;
+}
+
 export const formatDateTime = (iso: string) => formatWat(new Date(iso));
 
 export const toDeadlineInput = (iso: string | null) => (iso ? toDateTimeInput(new Date(iso)) : '');

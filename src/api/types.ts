@@ -76,6 +76,8 @@ export interface Task {
   assignee: PersonRef | null;
   assignedBy: PersonRef | null;
   assignedAt: string | null;
+  projectId: string | null;
+  project: PersonRef | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -138,4 +140,32 @@ export interface Checkin {
 export interface DirectoryUser extends PersonRef {
   role: Role;
   status: UserStatus;
+}
+
+export const PROJECT_STATUSES = ['ACTIVE', 'ON_HOLD', 'COMPLETED'] as const;
+export type ProjectStatus = (typeof PROJECT_STATUSES)[number];
+
+export const PROJECT_STATUS_LABELS: Record<ProjectStatus, string> = {
+  ACTIVE: 'Active',
+  ON_HOLD: 'On hold',
+  COMPLETED: 'Completed',
+};
+
+export interface ProjectMember extends PersonRef {
+  role: Role;
+}
+
+export interface Project {
+  id: string;
+  name: string;
+  description: string | null;
+  status: ProjectStatus;
+  /** Calendar days as YYYY-MM-DD. Never pass them through a browser timezone. */
+  startDate: string | null;
+  dueDate: string | null;
+  owner: PersonRef;
+  members: ProjectMember[];
+  progress: { total: number; done: number; overdue: number };
+  createdAt: string;
+  updatedAt: string;
 }

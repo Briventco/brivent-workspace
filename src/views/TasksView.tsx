@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { errorMessage } from '../api/client';
+import { listAllProjects } from '../api/projects';
 import {
   listPresetTasks,
   listTasks,
@@ -91,6 +92,7 @@ interface TaskResultsProps {
   overdue: boolean;
   preset: TaskPreset | null;
   assigneeId: string | null;
+  projectId: string;
   page: number;
   onPageChange: (page: number) => void;
   hasFilters: boolean;
@@ -103,6 +105,7 @@ const TaskResults: React.FC<TaskResultsProps> = ({
   overdue,
   preset,
   assigneeId,
+  projectId,
   page,
   onPageChange,
   hasFilters,
@@ -116,6 +119,7 @@ const TaskResults: React.FC<TaskResultsProps> = ({
       const filters = {
         priority: priority || undefined,
         assigneeId: assigneeId ?? undefined,
+        projectId: projectId || undefined,
         overdue,
       };
       if (!preset) {
@@ -125,7 +129,7 @@ const TaskResults: React.FC<TaskResultsProps> = ({
       const start = (page - 1) * TASKS_PAGE_SIZE;
       return { tasks: tasks.slice(start, start + TASKS_PAGE_SIZE), total: tasks.length };
     },
-    [tab.view, status, priority, overdue, preset, assigneeId, page],
+    [tab.view, status, priority, overdue, preset, assigneeId, projectId, page],
   );
 
   const handleStatusChange = async (task: Task, next: TaskStatus) => {
@@ -176,6 +180,7 @@ interface InitialFilters {
   preset: TaskPreset | null;
   assigneeId: string | null;
   assigneeName: string | null;
+  projectId: string;
 }
 
 /** Numbers around the app link here with their filters in the URL. Anything unknown is ignored. */
@@ -191,6 +196,7 @@ function parseFilters(search: string): InitialFilters {
     preset: preset && preset in TASK_PRESET_LABELS ? preset : null,
     assigneeId: params.get('assignee'),
     assigneeName: params.get('name'),
+    projectId: params.get('project') ?? '',
   };
 }
 
@@ -204,6 +210,8 @@ const TasksScreen: React.FC<{ initial: InitialFilters }> = ({ initial }) => {
   const [overdue, setOverdue] = useState(initial.overdue);
   const [preset, setPreset] = useState(initial.preset);
   const [assigneeId, setAssigneeId] = useState(initial.assigneeId);
+  const [projectId, setProjectId] = useState(initial.projectId);
+  const projects = useApiQuery((signal) => listAllProjects(signal), []);
   const [page, setPage] = useState(1);
 
   const activeTab = tabs.find((tab) => tab.view === view) ?? tabs[0];
@@ -255,6 +263,23 @@ const TasksScreen: React.FC<{ initial: InitialFilters }> = ({ initial }) => {
             }}
           />
         </div>
+        {(projects.data?.length ?? 0) > 0 && (
+          <div className="sm:w-44">
+            <Select
+              label="Filter by project"
+              hideLabel
+              value={projectId}
+              options={[
+                allOption('All projects'),
+                ...(projects.data ?? []).map(({ id, name }) => ({ value: id, label: name })),
+              ]}
+              onChange={(e) => {
+                setProjectId(e.target.value);
+                setPage(1);
+              }}
+            />
+          </div>
+        )}
         <Chip
           on={overdue}
           onClick={() => {
@@ -296,9 +321,10 @@ const TasksScreen: React.FC<{ initial: InitialFilters }> = ({ initial }) => {
         overdue={overdue}
         preset={preset}
         assigneeId={assigneeId}
+        projectId={projectId}
         page={page}
         onPageChange={setPage}
-        hasFilters={Boolean(status || priority || overdue || preset || assigneeId)}
+        hasFilters={Boolean(status || priority || overdue || preset || assigneeId || projectId)}
       />
     </>
   );

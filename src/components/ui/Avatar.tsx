@@ -10,7 +10,7 @@ function initials(name: string): string {
 }
 
 /** The same person always gets the same tint. */
-function tintFor(seed: string): number {
+export function tintFor(seed: string): number {
   let hash = 0;
   for (const char of seed) hash = (hash * 31 + char.charCodeAt(0)) >>> 0;
   return (hash % TINTS) + 1;

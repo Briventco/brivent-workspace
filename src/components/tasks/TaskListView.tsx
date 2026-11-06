@@ -35,6 +35,15 @@ export const TaskListView: React.FC<TaskListViewProps> = ({
             {task.title}
           </Link>
           <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-small text-text-2">
+            {task.project && (
+              <Link
+                to={`/projects/${task.project.id}`}
+                className="inline-flex items-center gap-1.5 text-text-2"
+              >
+                <Icon name="folder_open" size="sm" />
+                {task.project.name}
+              </Link>
+            )}
             <PriorityBadge priority={task.priority} />
             {task.isOverdue && (
               <span className="overdue">

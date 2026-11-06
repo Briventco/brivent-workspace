@@ -7,7 +7,8 @@ const parts = (date: Date, options: Intl.DateTimeFormatOptions, locale = 'en-GB'
   Object.fromEntries(
     new Intl.DateTimeFormat(locale, { timeZone: TIME_ZONE, ...options })
       .formatToParts(date)
-      .map(({ type, value }) => [type, value]),
+      // en-GB shortens September to the four-letter "Sept".
+      .map(({ type, value }) => [type, value === 'Sept' ? 'Sep' : value]),
   ) as Record<string, string>;
 
 /** The WAT calendar date as YYYY-MM-DD, the format the API uses for check-ins. */
@@ -66,6 +67,18 @@ export function formatShortDate(date: Date): string {
 export function formatDayHeading(date: Date): string {
   const { weekday, day, month } = parts(date, { weekday: 'long', day: 'numeric', month: 'short' });
   return `${weekday}, ${day} ${month}`;
+}
+
+/** Dec 18 */
+export function formatMonthDay(date: Date): string {
+  const { month, day } = parts(date, { month: 'short', day: 'numeric' }, 'en-US');
+  return `${month} ${day}`;
+}
+
+/** 18 Dec 2026, or 18 Dec with no year */
+export function formatDayMonth(date: Date, withYear = true): string {
+  const { day, month, year } = parts(date, { day: 'numeric', month: 'short', year: 'numeric' });
+  return withYear ? `${day} ${month} ${year}` : `${day} ${month}`;
 }
 
 /** 9:14 AM */

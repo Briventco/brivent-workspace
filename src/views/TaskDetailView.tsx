@@ -15,7 +15,7 @@ import { Select } from '../components/ui/Select';
 import { useSession } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { Link, navigate } from '../lib/router';
-import { canChangeStatus, canEditDetails, formatDateTime } from '../lib/tasks';
+import { canChangeStatus, canEditDetails, formatDateTime, canComment } from '../lib/tasks';
 import { useApiQuery } from '../lib/useApiQuery';
 
 const STATUS_OPTIONS = TASK_STATUSES.map((value) => ({ value, label: STATUS_LABELS[value] }));
@@ -69,6 +69,14 @@ const TaskDetails: React.FC<{ task: Task; onChanged: () => void }> = ({ task, on
   };
 
   const facts = [
+    ...(task.project
+      ? [
+          {
+            label: 'Project',
+            value: <Link to={`/projects/${task.project.id}`}>{task.project.name}</Link>,
+          },
+        ]
+      : []),
     { label: 'Assignee', value: task.assignee?.name ?? 'Unassigned' },
     ...(task.assignedBy && task.assignedAt
       ? [
@@ -151,7 +159,7 @@ const TaskDetails: React.FC<{ task: Task; onChanged: () => void }> = ({ task, on
         </Card>
       </div>
 
-      <TaskComments taskId={task.id} />
+      <TaskComments taskId={task.id} canComment={canComment(task, user.id, can)} />
 
       {isEditing && (
         <TaskFormModal
