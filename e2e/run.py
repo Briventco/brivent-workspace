@@ -197,6 +197,7 @@ def main():
         try:
             run_foundations(browser)
             run_public_pages(browser)
+            run_shell(browser)
             run_admin(browser, page, admin_task, throwaway_task, intern_name)
             if DESTRUCTIVE and BACKEND_LOG:
                 run_invites(browser, page)
@@ -765,6 +766,56 @@ def run_invites(browser, admin):
         expect(row.get_by_text("Pending invite", exact=True)).to_be_visible()
     step("Pending user: deactivate, then reactivate returns them to Pending", deactivate_pending)
     fresh.context.close()
+
+
+def run_shell(browser):
+    def intern_sidebar():
+        page = new_page(browser)
+        log_in(page, "INTERN")
+        nav = page.get_by_role("navigation", name="Main")
+        expect(nav.get_by_role("heading", name="Account")).to_be_visible()
+        expect(nav.get_by_role("heading", name="Administration")).to_have_count(0)
+        expect(page.get_by_role("button", name="New task")).to_have_count(0)
+        page.context.close()
+    step("Shell: Interns get Account, never Administration, and no New task", intern_sidebar)
+
+    def collapse():
+        page = new_page(browser)
+        log_in(page, "TEAM_LEAD")
+        expect(page.get_by_role("banner").get_by_role("button", name="New task")).to_be_visible()
+        expect(page.get_by_role("button", name="Collapse sidebar")).to_be_visible()
+        page.keyboard.press("[")
+        expect(page.get_by_role("button", name="Expand sidebar")).to_be_visible()
+        page.reload()
+        expect(page.get_by_role("button", name="Expand sidebar")).to_be_visible()
+        page.get_by_role("button", name="Expand sidebar").click()
+        expect(page.get_by_role("button", name="Collapse sidebar")).to_be_visible()
+        page.context.close()
+    step("Shell: [ collapses the sidebar and the choice survives a refresh", collapse)
+
+    def starts_collapsed():
+        page = new_page(browser, {"width": 1100, "height": 720})
+        log_in(page, "TEAM_LEAD")
+        expect(page.get_by_role("button", name="Expand sidebar")).to_be_visible()
+        page.context.close()
+    step("Shell: under 1280px the sidebar starts collapsed", starts_collapsed)
+
+    def bottom_bar():
+        page = new_page(browser, MOBILE)
+        log_in(page, "SUPER_ADMIN")
+        nav = page.get_by_role("navigation", name="Main")
+        for label in ("Home", "Tasks", "Check-ins", "Messages", "More"):
+            box = nav.get_by_role("link", name=label).bounding_box()
+            assert box["height"] >= 44, f"{label} is under 44px"
+        nav.get_by_role("link", name="More").click()
+        expect(page.get_by_role("heading", name="More", exact=True)).to_be_visible()
+        main = page.locator("main")
+        expect(main.get_by_role("link", name="Projects")).to_be_visible()
+        expect(main.get_by_role("link", name="User Management")).to_be_visible()
+        expect(main.get_by_role("link", name="My Tasks")).to_have_count(0)
+        expect_no_sideways_scroll(page, "/more")
+        page.context.close()
+    step("Shell: phones get the bottom bar, 44px targets and the More page", bottom_bar)
 
 
 def run_team_lead(browser, title, lead_name, intern_name):

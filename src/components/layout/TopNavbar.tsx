@@ -1,10 +1,13 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Icon } from '../ui/Icon';
+import brandIcon from '../../assets/brivent/logos/brivent-icon-cobalt.svg';
 import { ROLE_LABELS } from '../../api/types';
 import { useAuth, useSession } from '../../context/AuthContext';
-import { Link, usePathname } from '../../lib/router';
+import { Link, navigate, usePathname } from '../../lib/router';
+import { resolveRoute } from '../../routes';
+import { TaskFormModal } from '../tasks/TaskFormModal';
 import { Avatar } from '../ui/Avatar';
-import { IconButton } from '../ui/Button';
+import { Button } from '../ui/Button';
+import { Icon } from '../ui/Icon';
 
 const UserMenu: React.FC = () => {
   const { signOut } = useAuth();
@@ -81,17 +84,44 @@ const UserMenu: React.FC = () => {
   );
 };
 
-export const TopNavbar: React.FC<{ onOpenMobileMenu: () => void }> = ({ onOpenMobileMenu }) => (
-  <header className="topbar justify-between lg:justify-end sticky top-0 z-30">
-    <IconButton
-      icon="menu"
-      label="Open navigation"
-      onClick={onOpenMobileMenu}
-      className="lg:hidden"
-    />
+/** Phones have no sidebar to say where you are, so the bar does. */
+function usePhoneTitle(): string {
+  const pathname = usePathname();
+  if (pathname === '/') return 'Home';
+  if (pathname === '/more') return 'Brivent';
+  return resolveRoute(pathname)?.title ?? 'Brivent';
+}
 
-    <div className="flex items-center gap-2">
-      <UserMenu />
-    </div>
-  </header>
-);
+export const TopNavbar: React.FC = () => {
+  const { can } = useSession();
+  const [isCreating, setIsCreating] = useState(false);
+  const title = usePhoneTitle();
+
+  return (
+    <header className="topbar justify-between md:justify-end sticky top-0 z-30">
+      <div className="md:hidden flex items-center gap-2 min-w-0">
+        <img src={brandIcon} alt="" className="w-6 h-6 shrink-0" />
+        <span className="t-h3 truncate">{title}</span>
+      </div>
+
+      <div className="flex items-center gap-3">
+        {can('createTask') && (
+          <Button icon="add" onClick={() => setIsCreating(true)} className="hidden md:inline-flex">
+            New task
+          </Button>
+        )}
+        <UserMenu />
+      </div>
+
+      {isCreating && (
+        <TaskFormModal
+          onClose={() => setIsCreating(false)}
+          onSaved={(task) => {
+            setIsCreating(false);
+            navigate(`/tasks/${task.id}`);
+          }}
+        />
+      )}
+    </header>
+  );
+};

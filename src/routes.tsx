@@ -7,6 +7,7 @@ import { DirectoryView } from './views/DirectoryView';
 import { DocumentsView } from './views/DocumentsView';
 import { ForgotPasswordView } from './views/ForgotPasswordView';
 import { MessagesView } from './views/MessagesView';
+import { MoreView } from './views/MoreView';
 import { NotificationsView } from './views/NotificationsView';
 import { ProjectsView } from './views/ProjectsView';
 import { ResetPasswordView } from './views/ResetPasswordView';
@@ -46,6 +47,7 @@ const ROUTES: Record<string, AppRoute> = {
     action: 'viewDirectory',
   },
   '/notifications': { title: 'Notifications', element: <NotificationsView /> },
+  '/more': { title: 'More', element: <MoreView /> },
   '/settings': { title: 'Settings', element: <SettingsView /> },
   '/profile': { title: 'Settings', element: <SettingsView /> },
   '/users': {

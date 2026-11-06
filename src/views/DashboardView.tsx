@@ -1,15 +1,13 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo } from 'react';
 import { getTaskSummary, listTasks, TasksPage } from '../api/tasks';
 import { Task, TaskSummary } from '../api/types';
-import { TaskFormModal } from '../components/tasks/TaskFormModal';
 import { AsyncState } from '../components/ui/AsyncState';
-import { Button } from '../components/ui/Button';
 import { PriorityBadge } from '../components/ui/badges';
 import { Card, CardBody, CardHeader, StatCard } from '../components/ui/Card';
 import { Icon } from '../components/ui/Icon';
 import { PageHeader } from '../components/ui/PageHeader';
 import { useSession } from '../context/AuthContext';
-import { Link, navigate } from '../lib/router';
+import { Link } from '../lib/router';
 import { formatDateTime } from '../lib/tasks';
 import { ApiQuery, useApiQuery } from '../lib/useApiQuery';
 
@@ -176,30 +174,12 @@ const TaskDashboard: React.FC = () => {
 
 export const DashboardView: React.FC = () => {
   const { user, can } = useSession();
-  const [isCreating, setIsCreating] = useState(false);
   const firstName = user.fullName.trim().split(/\s+/)[0];
 
   return (
     <>
-      <PageHeader
-        title={`Welcome, ${firstName}`}
-        actions={
-          can('createTask') && (
-            <Button icon="add" onClick={() => setIsCreating(true)}>
-              New task
-            </Button>
-          )
-        }
-      />
-
+      <PageHeader title={`Welcome, ${firstName}`} />
       {can('viewOwnTasks') && <TaskDashboard />}
-
-      {isCreating && (
-        <TaskFormModal
-          onClose={() => setIsCreating(false)}
-          onSaved={(task) => navigate(`/tasks/${task.id}`)}
-        />
-      )}
     </>
   );
 };

@@ -10,10 +10,8 @@ import {
   TaskPriority,
   TaskStatus,
 } from '../api/types';
-import { TaskFormModal } from '../components/tasks/TaskFormModal';
 import { TaskListView } from '../components/tasks/TaskListView';
 import { AsyncState } from '../components/ui/AsyncState';
-import { Button } from '../components/ui/Button';
 import { Chip } from '../components/ui/Chip';
 import { EmptyState } from '../components/ui/EmptyState';
 import { PageHeader } from '../components/ui/PageHeader';
@@ -23,7 +21,6 @@ import { Tabs } from '../components/ui/Tabs';
 import { useSession } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { Action } from '../lib/permissions';
-import { navigate } from '../lib/router';
 import { canChangeStatus } from '../lib/tasks';
 import { useApiQuery } from '../lib/useApiQuery';
 
@@ -160,7 +157,6 @@ export const TasksView: React.FC = () => {
   const [priority, setPriority] = useState<TaskPriority | ''>('');
   const [overdue, setOverdue] = useState(false);
   const [page, setPage] = useState(1);
-  const [isCreating, setIsCreating] = useState(false);
 
   const activeTab = tabs.find((tab) => tab.view === view) ?? tabs[0];
 
@@ -169,13 +165,6 @@ export const TasksView: React.FC = () => {
       <PageHeader
         title="My Tasks"
         description="Everything on your plate, and what you've handed to others."
-        actions={
-          can('createTask') && (
-            <Button icon="add" onClick={() => setIsCreating(true)}>
-              New task
-            </Button>
-          )
-        }
       />
 
       {tabs.length > 1 && (
@@ -238,13 +227,6 @@ export const TasksView: React.FC = () => {
         onPageChange={setPage}
         hasFilters={Boolean(status || priority || overdue)}
       />
-
-      {isCreating && (
-        <TaskFormModal
-          onClose={() => setIsCreating(false)}
-          onSaved={(task) => navigate(`/tasks/${task.id}`)}
-        />
-      )}
     </>
   );
 };
