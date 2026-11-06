@@ -1,7 +1,7 @@
 import React from 'react';
 import { Action } from './lib/permissions';
 import { CalendarView } from './views/CalendarView';
-import { DailyRoutineView } from './views/DailyRoutineView';
+import { DailyCheckinView } from './views/DailyCheckinView';
 import { DashboardView } from './views/DashboardView';
 import { DirectoryView } from './views/DirectoryView';
 import { DocumentsView } from './views/DocumentsView';
@@ -31,7 +31,7 @@ const DesignSystemView = import.meta.env.DEV
 
 const ROUTES: Record<string, AppRoute> = {
   '/': { title: 'Dashboard', element: <DashboardView /> },
-  '/daily': { title: 'Daily Check-in', element: <DailyRoutineView /> },
+  '/daily': { title: 'Daily Check-in', element: <DailyCheckinView />, action: 'submitCheckin' },
   '/tasks': {
     title: 'My Tasks',
     element: <TasksView />,

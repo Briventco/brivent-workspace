@@ -19,7 +19,7 @@ const DAILY_WORK: NavSection = {
   title: 'Daily work',
   items: [
     { to: '/', label: 'Dashboard', icon: 'space_dashboard' },
-    { to: '/daily', label: 'Daily Check-in', icon: 'edit_note', comingSoon: true },
+    { to: '/daily', label: 'Daily Check-in', icon: 'edit_note', action: 'submitCheckin' },
     { to: '/tasks', label: 'My Tasks', icon: 'task_alt', action: 'viewOwnTasks' },
     { to: '/projects', label: 'Projects', icon: 'folder_open', comingSoon: true },
     { to: '/messages', label: 'Internal Messages', icon: 'forum', comingSoon: true },

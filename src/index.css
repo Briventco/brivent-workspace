@@ -384,3 +384,58 @@
   background: var(--danger-bg);
   color: var(--danger);
 }
+
+/* Check-ins */
+.blocker-box {
+  display: flex;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: var(--r-md);
+  background: var(--danger-bg);
+  color: var(--danger);
+}
+
+.blocker-box.is-handled {
+  background: var(--surface-2);
+  color: var(--text-3);
+}
+
+.blocker-box.is-handled p {
+  text-decoration: line-through;
+}
+
+.reply-box {
+  display: flex;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: var(--r-md);
+  background: var(--brand-50);
+}
+
+.tag-late {
+  padding: 1px 6px;
+  border-radius: var(--r-xs);
+  background: var(--warning-bg);
+  color: var(--warning);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.textarea.has-blocker {
+  border-color: #f3c2bc;
+  background: var(--danger-bg);
+}
+
+/* Wide enough that a card's three actions stay on one line: two across at 1280, three at 1440. */
+.blocker-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr));
+  gap: 20px;
+  align-items: start;
+}
+
+@media (max-width: 639px) {
+  .make-task .ms {
+    display: none;
+  }
+}

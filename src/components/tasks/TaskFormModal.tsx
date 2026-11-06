@@ -16,6 +16,8 @@ import { AssigneePicker } from './AssigneePicker';
 interface TaskFormModalProps {
   /** Edits this task. Without it, the form creates a new one. */
   task?: Task;
+  /** Starting text for a new task, such as one made from a check-in blocker. */
+  prefill?: { title: string; description: string };
   onClose: () => void;
   onSaved: (task: Task) => void;
 }
@@ -25,12 +27,17 @@ const PRIORITY_OPTIONS = TASK_PRIORITIES.map((value) => ({
   label: PRIORITY_LABELS[value],
 }));
 
-export const TaskFormModal: React.FC<TaskFormModalProps> = ({ task, onClose, onSaved }) => {
+export const TaskFormModal: React.FC<TaskFormModalProps> = ({
+  task,
+  prefill,
+  onClose,
+  onSaved,
+}) => {
   const { user, can } = useSession();
   const toast = useToast();
 
-  const [title, setTitle] = useState(task?.title ?? '');
-  const [description, setDescription] = useState(task?.description ?? '');
+  const [title, setTitle] = useState(task?.title ?? prefill?.title ?? '');
+  const [description, setDescription] = useState(task?.description ?? prefill?.description ?? '');
   const [priority, setPriority] = useState<TaskPriority>(task?.priority ?? 'MEDIUM');
   const [deadline, setDeadline] = useState(toDeadlineInput(task?.deadline ?? null));
   const [assignee, setAssignee] = useState<PersonRef | null>(task?.assignee ?? null);
@@ -78,7 +85,7 @@ export const TaskFormModal: React.FC<TaskFormModalProps> = ({ task, onClose, onS
     const nextErrors = {
       title: canEdit && !title.trim() ? 'Give the task a short title.' : undefined,
       deadline:
-        !task && deadline && new Date(deadline) < new Date()
+        !task && deadline && fromDeadlineInput(deadline) < new Date().toISOString()
           ? 'That date has passed. Pick today or later.'
           : undefined,
     };
