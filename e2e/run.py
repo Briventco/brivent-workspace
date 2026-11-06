@@ -213,6 +213,8 @@ def main():
             run_admin(browser, page, admin_task, throwaway_task, intern_name)
             if DESTRUCTIVE and BACKEND_LOG:
                 run_invites(browser, page)
+                if "checkedInToday" in call("GET", "/tasks/summary", admin_token)["summary"]:
+                    run_checkins(browser, admin_token)
             run_team_lead(browser, lead_task, lead_name, intern_name)
             run_permissions(lead_email, lead_password)
             run_intern(browser, lead_task, admin_task)
@@ -905,6 +907,201 @@ def run_dashboard(browser, admin_token):
                 other.context.close()
     step("Dashboard: fits 1280 and 1440 for both versions", widths)
     page.context.close()
+
+
+def run_checkins(browser, admin_token):
+    name, email = f"E2E Checkin {RUN}", f"e2e.checkin.{RUN}@example.test"
+    blocker = f"Waiting on the login for run {RUN}."
+    task_title = f"{PREFIX} checkin chip"
+    user = call("POST", "/users", admin_token, {"name": name, "email": email, "role": "INTERN"})["user"]
+    member = new_page(browser)
+    member.goto(emailed_link(email, "/set-password"))
+    fill_passwords(member, PASSWORD)
+    member.get_by_role("button", name="Set password").click()
+    member.get_by_label("Password", exact=True).fill(PASSWORD)
+    member.get_by_role("button", name="Sign in").click()
+    expect(member.get_by_role("heading", name=GREETING)).to_be_visible()
+    call("POST", "/tasks", admin_token, {"title": task_title, "assigneeId": user["id"]})
+    draft_key = f"brivent.checkinDraft.{user['id']}."
+
+    def no_team_tab():
+        expect(member.get_by_role("link", name="Daily Check-in")).not_to_contain_text("Soon")
+        member.goto(f"{APP}/daily")
+        expect(member.get_by_role("heading", name="Daily check-in", exact=True)).to_be_visible()
+        expect(member.get_by_role("tablist", name="Check-in views")).to_have_count(0)
+        member.goto(f"{APP}/daily?tab=team")
+        expect(member.get_by_role("heading", name="Team check-ins are for leads")).to_be_visible()
+        member.get_by_role("link", name="Go to my check-in").click()
+        expect(member.get_by_role("button", name="Submit check-in")).to_be_visible()
+    step("Check-in: members get one view, and team links explain themselves", no_team_tab)
+
+    def required():
+        member.get_by_role("button", name="Submit check-in").click()
+        expect(member.get_by_text("Say what you finished yesterday.")).to_be_visible()
+        expect(member.get_by_text("Say what you're working on today.")).to_be_visible()
+    step("Check-in: the two required answers are asked for", required)
+
+    def autosave():
+        member.get_by_label("What did you finish yesterday?").fill("Wrote the first draft.")
+        expect(member.get_by_text(re.compile("Draft saved"))).to_be_visible(timeout=6_000)
+        member.reload()
+        expect(member.get_by_label("What did you finish yesterday?")).to_have_value("Wrote the first draft.")
+    step("Check-in: autosaves a draft that survives a refresh", autosave)
+
+    def chips_and_blocker():
+        member.get_by_role("button", name=task_title).click()
+        expect(member.get_by_label("What are you working on today?")).to_have_value(task_title)
+        member.get_by_label("Anything blocking you?").fill(blocker)
+        expect(member.get_by_text("Your lead will see this at the top of their review.")).to_be_visible()
+    step("Check-in: a task chip links and inserts the task, and blockers warn", chips_and_blocker)
+
+    def submit():
+        member.get_by_role("button", name="Submit check-in").click()
+        expect(member.get_by_text("Check-in submitted.")).to_be_visible()
+        expect(member.get_by_role("button", name="Update check-in")).to_be_visible()
+        expect(member.get_by_text(re.compile("^Submitted "))).to_be_visible()
+        keys = member.evaluate("Object.keys(localStorage)")
+        assert not [key for key in keys if key.startswith(draft_key)], "The draft outlived the submit"
+    step("Check-in: submits and clears the draft", submit)
+
+    def edit():
+        field = member.get_by_label("What did you finish yesterday?")
+        field.fill("Wrote and sent the first draft.")
+        member.get_by_role("button", name="Update check-in").click()
+        expect(member.get_by_text("Check-in updated.")).to_be_visible()
+        member.reload()
+        expect(field).to_have_value("Wrote and sent the first draft.")
+        expect(member.get_by_label("Anything blocking you?")).to_have_value(blocker)
+    step("Check-in: edits keep the blocker and links", edit)
+
+    def lock_mid_edit():
+        def locked(route):
+            if route.request.method != "PUT":
+                return route.fallback()
+            route.fulfill(status=409, json={"error": {"code": "CHECKIN_LOCKED", "message": "Locked."}})
+
+        other = new_page(browser)
+        log_in_as(other, email, PASSWORD)
+        other.goto(f"{APP}/daily")
+        other.route(f"{api_url()}/checkins/today", locked)
+        other.get_by_role("button", name="Update check-in").click()
+        expect(other.get_by_text("Locked at 6:00 PM")).to_be_visible()
+        expect(other.get_by_text("your last changes weren't saved")).to_be_visible()
+        expect(other.get_by_role("button", name="Update check-in")).to_have_count(0)
+        other.context.close()
+    step("Check-in: a save refused at 18:00 shows the locked view (simulated)", lock_mid_edit)
+
+    def locked_on_load():
+        def read_only(route):
+            response = route.fetch()
+            body = response.json()
+            body["checkin"]["editable"] = False
+            route.fulfill(response=response, json=body)
+
+        other = new_page(browser)
+        log_in_as(other, email, PASSWORD)
+        other.route(f"{api_url()}/checkins/today", read_only)
+        other.goto(f"{APP}/daily")
+        expect(other.get_by_text("Locked at 6:00 PM")).to_be_visible()
+        expect(other.locator("main textarea")).to_have_count(0)
+        expect(other.get_by_text(blocker)).to_be_visible()
+        other.context.close()
+    step("Check-in: after 18:00 it opens read-only (simulated)", locked_on_load)
+
+    lead = new_page(browser)
+    log_in(lead, "TEAM_LEAD")
+    card = lead.locator("article", has_text=blocker)
+
+    def review():
+        lead.goto(f"{APP}/daily")
+        expect(lead.get_by_role("tab", name="Team review")).to_have_attribute("aria-selected", "true")
+        expect(lead.get_by_role("heading", name=re.compile("Blockers raised today"))).to_be_visible()
+        expect(card).to_be_visible()
+        expect(lead.get_by_role("heading", name=re.compile("Not submitted"))).to_be_visible()
+        expect(lead.get_by_role("button", name=re.compile("Nudge"))).to_have_count(0)
+        lead.get_by_role("button", name=re.compile("Not submitted")).click()
+        expect(card).to_have_count(0)
+        lead.get_by_role("button", name=re.compile("All")).first.click()
+        expect(card).to_be_visible()
+    step("Check-in review: blockers first, filters work, no nudges", review)
+
+    def reply():
+        card.get_by_role("button", name="Reply").click()
+        lead.get_by_label(f"Reply to {name}").fill(f"On it, run {RUN}.")
+        lead.get_by_role("button", name="Send reply").click()
+        expect(card.get_by_text(f"On it, run {RUN}.")).to_be_visible()
+        member.goto(f"{APP}/daily")
+        expect(member.get_by_text(f"On it, run {RUN}.")).to_be_visible()
+    step("Check-in review: a reply shows on their check-in", reply)
+
+    def make_task():
+        card.get_by_role("button", name="Make a task").click()
+        dialog = lead.get_by_role("dialog")
+        expect(dialog.get_by_label("Title")).to_have_value(blocker)
+        expect(dialog.get_by_label("Description")).to_have_value(re.compile(re.escape(name)))
+        dialog.get_by_label("Title").fill(f"{PREFIX} from blocker")
+        dialog.get_by_role("button", name="Create task").click()
+        expect(lead.get_by_text("Task created.")).to_be_visible()
+        expect(lead.get_by_role("dialog")).to_have_count(0)
+    step("Check-in review: Make a task opens the form prefilled from the blocker", make_task)
+
+    def handled():
+        card.get_by_role("button", name="Mark handled").click()
+        expect(card.get_by_text("Handled", exact=True)).to_be_visible()
+        expect(card.get_by_role("button", name="Make a task")).to_have_count(0)
+        card.get_by_role("button", name="Reopen").click()
+        expect(card.get_by_role("button", name="Mark handled")).to_be_visible()
+    step("Check-in review: mark handled, then reopen", handled)
+
+    def other_day():
+        lead.get_by_role("button", name="Previous day").click()
+        expect(card).to_have_count(0)
+        lead.get_by_role("button", name="Next day").click()
+        expect(card).to_be_visible()
+        expect(lead.get_by_role("button", name="Next day")).to_have_count(0)
+    step("Check-in review: earlier days, and no going past today", other_day)
+
+    def review_error():
+        other = new_page(browser)
+        log_in(other, "TEAM_LEAD")
+        other.route(f"{api_url()}/checkins/team*", lambda route: route.abort())
+        other.goto(f"{APP}/daily")
+        expect(other.get_by_role("heading", name="Couldn't load check-ins")).to_be_visible()
+        other.unroute_all()
+        other.get_by_role("button", name="Try again").click()
+        expect(other.get_by_role("heading", name=re.compile("Not submitted"))).to_be_visible()
+        other.context.close()
+    step("Check-in review: a failed load offers Try again (simulated)", review_error)
+
+    def history():
+        page = new_page(browser)
+        log_in(page, "INTERN")
+        page.goto(f"{APP}/daily")
+        expect(page.get_by_role("heading", name="My past check-ins")).to_be_visible()
+        page.get_by_label("Show").select_option("thisMonth")
+        expect(page.get_by_role("heading", name="My past check-ins")).to_be_visible()
+        expect(page.get_by_text("Couldn't load check-ins")).to_have_count(0)
+        page.context.close()
+    step("Check-in: history loads for every range", history)
+
+    def manager_form():
+        lead.get_by_role("tab", name="My check-in").click()
+        expect(lead.get_by_label("What did you finish yesterday?")).to_be_visible()
+        expect(lead).to_have_url(f"{APP}/daily?tab=mine")
+    step("Check-in: managers submit their own under My check-in", manager_form)
+
+    def fits():
+        for width in (375, 1280, 1440):
+            for login, path in (((email, PASSWORD), "/daily"), (credentials("TEAM_LEAD"), "/daily?tab=team")):
+                page = new_page(browser, {"width": width, "height": 800})
+                log_in_as(page, *login)
+                page.goto(APP + path)
+                page.get_by_role("heading", level=1).wait_for()
+                expect_no_sideways_scroll(page, f"{path} at {width}")
+                page.context.close()
+    step("Check-in: form and review fit 375, 1280 and 1440", fits)
+    member.context.close()
+    lead.context.close()
 
 
 def run_shell(browser):
