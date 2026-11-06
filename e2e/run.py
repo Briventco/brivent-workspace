@@ -120,6 +120,7 @@ def pick_assignee(dialog, name):
     picker.click()
     picker.fill(name.split()[0])
     dialog.get_by_role("option", name=re.compile(re.escape(name))).click()
+    picker.press("Escape")
 
 
 def create_task(page, title, assignee=None):
@@ -227,6 +228,7 @@ def main():
                     run_projects(browser, admin_token)
                     run_meetings(browser, admin_token)
                     run_departments(browser, admin_token)
+                    run_multi_assignee(browser, admin_token)
             run_team_lead(browser, lead_task, lead_name, intern_name)
             run_permissions(lead_email, lead_password)
             run_intern(browser, lead_task, admin_task)
@@ -933,7 +935,7 @@ def run_checkins(browser, admin_token):
     member.get_by_label("Password", exact=True).fill(PASSWORD)
     member.get_by_role("button", name="Sign in").click()
     expect(member.get_by_role("heading", name=GREETING)).to_be_visible()
-    call("POST", "/tasks", admin_token, {"title": task_title, "assigneeId": user["id"]})
+    call("POST", "/tasks", admin_token, {"title": task_title, "assigneeIds": [user["id"]]})
     draft_key = f"brivent.checkinDraft.{user['id']}."
 
     def no_team_tab():
@@ -1317,6 +1319,215 @@ def at(time_of_day):
     return f"{wat_today()}T{time_of_day}:00+01:00"
 
 
+def active_user(admin_token, name, email):
+    """A real invited account that has set its password, read from the console email."""
+    user = call("POST", "/users", admin_token, {"name": name, "email": email, "role": "TEAM_MEMBER"})["user"]
+    token = re.search(r"token=(\S+)", emailed_link(email, "/set-password")).group(1)
+    call("POST", "/auth/set-password", body={"token": token, "newPassword": PASSWORD})
+    return {**user, "password": PASSWORD}
+
+
+def run_multi_assignee(browser, admin_token):
+    login = dict(zip(("email", "password"), credentials("TEAM_LEAD")))
+    lead_auth = call("POST", "/auth/login", body=login)
+    lead_user, lead_token = lead_auth["user"], lead_auth["token"]
+    intern_user = call(
+        "POST", "/auth/login", body=dict(zip(("email", "password"), credentials("INTERN")))
+    )["user"]
+    # Enough people to fill a task: Lead, Intern, Admin and these eight make eleven.
+    extra = [
+        active_user(admin_token, f"E2E Share {chr(65 + n)} {RUN}", f"e2e.share{n}.{RUN}@example.test")
+        for n in range(8)
+    ]
+    ana, ben = extra[0], extra[1]
+    shared = f"{PREFIX} shared work"
+
+    lead = new_page(browser)
+    log_in(lead, "TEAM_LEAD")
+    sent = []
+
+    def record(request):
+        if request.method in ("POST", "PATCH", "PUT") and "/tasks" in request.url and request.post_data:
+            sent.append((request.method, request.url.split("/api")[1], json.loads(request.post_data)))
+
+    lead.on("request", record)
+    task_id = {}
+
+    def create():
+        lead.goto(f"{APP}/tasks")
+        lead.get_by_role("button", name="New task").click()
+        dialog = lead.get_by_role("dialog")
+        dialog.get_by_label("Title").fill(shared)
+        picker = dialog.get_by_role("combobox", name="Assignees")
+        picker.click()
+        picker.fill("E2E Share A")
+        option = dialog.get_by_role("option", name=re.compile(re.escape(ana["name"])))
+        option.click()
+        expect(dialog.get_by_role("listbox")).to_be_visible()
+        picker.fill("E2E Share B")
+        dialog.get_by_role("option", name=re.compile(re.escape(ben["name"]))).click()
+        picker.press("Escape")
+        expect(dialog.get_by_role("listbox")).to_have_count(0)
+        expect(dialog.get_by_label("Title")).to_have_value(shared)
+        expect(dialog.get_by_role("button", name=f"Remove {ana['name']}")).to_be_visible()
+        sent.clear()
+        dialog.get_by_role("button", name="Create task").click()
+        expect(lead.get_by_role("heading", name=shared)).to_be_visible()
+        method, path, body = sent[0]
+        assert (method, path) == ("POST", "/tasks"), sent
+        assert body["assigneeIds"] == [ana["id"], ben["id"]] and "assigneeId" not in body, body
+        task_id["id"] = lead.url.rsplit("/", 1)[1]
+    step("New task: pick two people in a row, sent as assigneeIds", create)
+
+    def detail_lists_everyone():
+        section = lead.get_by_role("heading", name="Assignees · 2").locator("..")
+        for person in (ana, ben):
+            row = section.get_by_role("listitem").filter(has_text=person["name"])
+            expect(row).to_contain_text(f"Assigned by {lead_user['name']}")
+    step("Task detail lists every assignee with who assigned them", detail_lists_everyone)
+
+    def add_and_remove():
+        picker = lead.get_by_role("combobox", name="Add assignee")
+        picker.click()
+        picker.fill(intern_user["name"].split()[0])
+        sent.clear()
+        lead.get_by_role("option", name=re.compile(re.escape(intern_user["name"]))).click()
+        expect(lead.get_by_role("heading", name="Assignees · 3")).to_be_visible()
+        method, path, body = sent[0]
+        assert (method, path) == ("PUT", f"/tasks/{task_id['id']}/assignees") and len(sent) == 1, sent
+        assert set(body["assigneeIds"]) == {ana["id"], ben["id"], intern_user["id"]}, body
+        sent.clear()
+        lead.get_by_role("button", name=f"Remove {ben['name']}").click()
+        expect(lead.get_by_role("heading", name="Assignees · 2")).to_be_visible()
+        assert set(sent[0][2]["assigneeIds"]) == {ana["id"], intern_user["id"]}, sent
+    step("Task detail: add and remove send everyone who stays", add_and_remove)
+
+    def any_assignee_acts():
+        member = new_page(browser)
+        log_in_as(member, ana["email"], ana["password"])
+        member.goto(f"{APP}/tasks")
+        expect(member.get_by_role("link", name=shared)).to_be_visible()
+        intern = new_page(browser)
+        log_in(intern, "INTERN")
+        intern.goto(f"{APP}/tasks")
+        expect(intern.get_by_role("link", name=shared)).to_be_visible()
+        intern.goto(f"{APP}/tasks/{task_id['id']}")
+        intern.get_by_label("Status").select_option("IN_PROGRESS")
+        expect(intern.get_by_text("Moved to In progress.")).to_be_visible()
+        intern.get_by_label("Add a comment").fill("The second assignee can comment.")
+        intern.get_by_role("button", name="Post comment").click()
+        expect(intern.get_by_text("The second assignee can comment.")).to_be_visible()
+        expect(intern.get_by_role("combobox", name="Add assignee")).to_have_count(0)
+        expect(intern.get_by_role("button", name=re.compile("^Remove "))).to_have_count(0)
+        intern.context.close()
+        member.context.close()
+    step("My Tasks, status and comments work for any assignee, with no add or remove for them", any_assignee_acts)
+
+    def stack():
+        ids = [ana["id"], ben["id"], extra[2]["id"], extra[3]["id"], extra[4]["id"]]
+        call("PUT", f"/tasks/{task_id['id']}/assignees", lead_token, {"assigneeIds": ids})
+        lead.goto(f"{APP}/tasks?view=all")
+        row = lead.get_by_role("listitem").filter(has=lead.get_by_role("link", name=shared))
+        faces = row.locator(".av-stack").first
+        expect(faces.locator(".av")).to_have_count(3)
+        expect(faces).to_contain_text("+2")
+        expect(faces).to_have_attribute("title", re.compile(re.escape(extra[4]["name"])))
+    step("Task rows stack three faces, then +2, with every name on hover", stack)
+
+    def edit_form():
+        lead.goto(f"{APP}/tasks/{task_id['id']}")
+        lead.get_by_role("button", name="Edit").click()
+        dialog = lead.get_by_role("dialog")
+        dialog.get_by_role("button", name=f"Remove {extra[4]['name']}").click()
+        sent.clear()
+        dialog.get_by_role("button", name="Save changes").click()
+        expect(lead.get_by_role("heading", name="Assignees · 4")).to_be_visible()
+        assert sent[0][0] == "PATCH" and list(sent[0][2]) == ["assigneeIds"], sent
+        assert set(sent[0][2]["assigneeIds"]) == {p["id"] for p in extra[:4]}, sent
+    step("Edit form: changes go through PATCH assigneeIds, and unchanged people stay", edit_form)
+
+    def ten_is_the_limit():
+        people = [lead_user["id"], intern_user["id"]] + [person["id"] for person in extra]
+        call("PUT", f"/tasks/{task_id['id']}/assignees", lead_token, {"assigneeIds": people})
+        lead.reload()
+        expect(lead.get_by_role("heading", name="Assignees · 10")).to_be_visible()
+        expect(lead.get_by_role("combobox", name="Add assignee")).to_have_count(0)
+        expect(lead.get_by_text("A task can have up to 10 people.")).to_be_visible()
+        lead.get_by_role("button", name="Edit").click()
+        dialog = lead.get_by_role("dialog")
+        expect(dialog.get_by_role("combobox", name="Assignees")).to_have_count(0)
+        expect(dialog.get_by_text("A task can have up to 10 people.")).to_be_visible()
+        dialog.get_by_role("button", name="Cancel").click()
+        try:
+            eleventh = call("POST", "/auth/login", body={"email": credentials("SUPER_ADMIN")[0], "password": credentials("SUPER_ADMIN")[1]})["user"]["id"]
+            call("PUT", f"/tasks/{task_id['id']}/assignees", lead_token, {"assigneeIds": people + [eleventh]})
+            raise AssertionError("The server should refuse an eleventh assignee")
+        except urllib.error.HTTPError as error:
+            assert error.code == 400, error.code
+    step("Ten people is the limit: pickers go away, and the server agrees", ten_is_the_limit)
+
+    def deactivated_stays():
+        call("POST", f"/users/{extra[7]['id']}/deactivate", admin_token)
+        lead.reload()
+        expect(lead.get_by_role("listitem").filter(has_text=extra[7]["name"])).to_be_visible()
+        lead.get_by_role("button", name=f"Remove {extra[6]['name']}").click()
+        expect(lead.get_by_role("heading", name="Assignees · 9")).to_be_visible()
+        expect(lead.get_by_role("listitem").filter(has_text=extra[7]["name"])).to_be_visible()
+    step("A deactivated assignee stays, and saving others doesn't remove them", deactivated_stays)
+
+    def everywhere():
+        small = f"{PREFIX} linked task"
+        project = call("POST", "/projects", lead_token, {"name": f"{PREFIX} shared project"})["project"]
+        task = call("POST", "/tasks", lead_token, {
+            "title": small, "assigneeIds": [intern_user["id"], ben["id"]], "projectId": project["id"],
+        })["task"]
+
+        lead.goto(f"{APP}/projects/{project['id']}")
+        row = lead.get_by_role("listitem").filter(has=lead.get_by_role("link", name=small))
+        expect(row.locator(".av-stack .av")).to_have_count(2)
+        lead.get_by_label("Filter by assignee").select_option(label=ben["name"])
+        expect(lead.get_by_role("link", name=small)).to_be_visible()
+
+        today = datetime.now(timezone(timedelta(hours=1))).strftime("%Y-%m-%d")
+        meeting = call("POST", "/meetings", lead_token, {
+            "title": f"{PREFIX} linked meeting", "startsAt": f"{today}T22:00:00+01:00",
+            "endsAt": f"{today}T22:30:00+01:00", "attendeeIds": [], "taskIds": [task["id"]],
+        })["meeting"]
+        lead.goto(f"{APP}/calendar?meeting={meeting['id']}")
+        linked = lead.get_by_role("dialog").get_by_role("listitem").filter(has_text=small)
+        expect(linked.locator(".av")).to_have_count(2)
+
+        intern_token = call(
+            "POST", "/auth/login", body=dict(zip(("email", "password"), credentials("INTERN")))
+        )["token"]
+        call("PUT", "/checkins/today", intern_token, {
+            "workCompleted": "Finished.", "priorities": "Plan.", "blockers": "", "taskIds": [task["id"]],
+        })
+        lead.goto(f"{APP}/daily?tab=team")
+        linked = lead.get_by_role("listitem").filter(has=lead.get_by_role("link", name=small)).last
+        expect(linked.locator(".av")).to_have_count(2)
+
+        lead.goto(f"{APP}/")
+        workload = lead.get_by_role("heading", name="Open work by person").locator("../..")
+        expect(workload.get_by_role("link", name=re.compile(re.escape(ben["name"])))).to_be_visible()
+    step("Project detail, meetings, check-ins and workload show everyone on a task", everywhere)
+
+    def phone():
+        small = new_page(browser, MOBILE)
+        log_in(small, "TEAM_LEAD")
+        small.goto(f"{APP}/tasks/{task_id['id']}")
+        expect(small.get_by_role("heading", name="Assignees · 9")).to_be_visible()
+        expect_no_sideways_scroll(small, "shared task")
+        small.goto(f"{APP}/tasks?view=all")
+        expect(small.get_by_role("link", name=shared)).to_be_visible()
+        expect_no_sideways_scroll(small, "task list")
+        small.context.close()
+    step("Shared tasks fit 375px", phone)
+
+    for person in extra[:7]:
+        call("POST", f"/users/{person['id']}/deactivate", admin_token)
+
+
 def run_departments(browser, admin_token):
     lead_login = dict(zip(("email", "password"), credentials("TEAM_LEAD")))
     intern_login = dict(zip(("email", "password"), credentials("INTERN")))
@@ -1452,12 +1663,12 @@ def run_departments(browser, admin_token):
             {"departmentId": creative["id"], "positionId": designer["id"]},
         )
         title = f"{PREFIX} placed task"
-        task = call("POST", "/tasks", lead_token, {"title": title, "assigneeId": intern_user["id"]})["task"]
-        assert task["assignee"]["position"]["name"] == "Graphic Designer", task["assignee"]
+        task = call("POST", "/tasks", lead_token, {"title": title, "assigneeIds": [intern_user["id"]]})["task"]
+        assert task["assignees"][0]["position"]["name"] == "Graphic Designer", task["assignees"]
 
         lead.goto(f"{APP}/tasks?view=team")
         lead.goto(f"{APP}/tasks/{task['id']}")
-        expect(lead.get_by_text(f"{intern_name} · Graphic Designer")).to_be_visible()
+        expect(lead.get_by_role("listitem").filter(has_text=intern_name)).to_contain_text("Graphic Designer")
 
         lead.goto(f"{APP}/tasks")
         lead.get_by_role("button", name="New task").click()
@@ -1675,7 +1886,7 @@ def run_meetings(browser, admin_token):
     secret_task = f"{PREFIX} private task"
     intern = call("POST", "/auth/login", body=dict(zip(("email", "password"), credentials("INTERN"))))["user"]
     lead_user = call("POST", "/auth/login", body=dict(zip(("email", "password"), credentials("TEAM_LEAD"))))["user"]
-    task = call("POST", "/tasks", admin_token, {"title": f"{PREFIX} meeting task", "assigneeId": lead_user["id"]})["task"]
+    task = call("POST", "/tasks", admin_token, {"title": f"{PREFIX} meeting task", "assigneeIds": [lead_user["id"]]})["task"]
 
     lead = new_page(browser)
     log_in(lead, "TEAM_LEAD")
