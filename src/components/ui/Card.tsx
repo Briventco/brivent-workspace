@@ -1,68 +1,54 @@
 import React from 'react';
+import { Link } from '../../lib/router';
+import { Icon, IconName } from './Icon';
 
-interface CardProps extends React.HTMLAttributes<HTMLDivElement> {
-  children: React.ReactNode;
-  className?: string;
-  hoverable?: boolean;
+type DivProps = React.HTMLAttributes<HTMLDivElement>;
+
+export const Card: React.FC<DivProps> = ({ className = '', ...props }) => (
+  <div className={`card overflow-hidden ${className}`} {...props} />
+);
+
+export const CardHeader: React.FC<DivProps> = ({ className = '', ...props }) => (
+  <div className={`card-head ${className}`} {...props} />
+);
+
+export const CardBody: React.FC<DivProps> = ({ className = '', ...props }) => (
+  <div className={`card-pad ${className}`} {...props} />
+);
+
+export const CardFooter: React.FC<DivProps> = ({ className = '', ...props }) => (
+  <div className={`card-foot ${className}`} {...props} />
+);
+
+interface StatCardProps {
+  label: string;
+  value: React.ReactNode;
+  icon?: IconName;
+  hint?: string;
+  /** Marks a number that needs action, such as overdue work. */
+  attention?: boolean;
+  /** Every number is a link to the list behind it. */
+  to?: string;
 }
 
-export const Card: React.FC<CardProps> = ({
-  children,
-  className = '',
-  hoverable = false,
-  ...props
-}) => {
-  return (
-    <div
-      className={`bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden transition-all duration-150 ${
-        hoverable ? 'hover:shadow-md hover:border-slate-300' : ''
-      } ${className}`}
-      {...props}
-    >
-      {children}
-    </div>
+export const StatCard: React.FC<StatCardProps> = ({ label, value, icon, hint, attention, to }) => {
+  const body = (
+    <>
+      <span className={`k ${attention ? 'text-danger' : ''}`}>
+        {icon && <Icon name={icon} size="sm" />}
+        {label}
+      </span>
+      <span className={`v ${attention ? 'text-danger' : ''}`}>{value}</span>
+      {hint && <span className="text-caption text-text-3">{hint}</span>}
+    </>
+  );
+  const className = `card kpi ${attention ? 'attn' : ''}`;
+
+  return to ? (
+    <Link to={to} className={`${className} no-underline hover:no-underline text-text`}>
+      {body}
+    </Link>
+  ) : (
+    <div className={className}>{body}</div>
   );
 };
-
-export const CardHeader: React.FC<React.HTMLAttributes<HTMLDivElement>> = ({
-  children,
-  className = '',
-  ...props
-}) => {
-  return (
-    <div
-      className={`px-5 py-4 border-b border-slate-200 flex items-center justify-between ${className}`}
-      {...props}
-    >
-      {children}
-    </div>
-  );
-};
-
-export const CardBody: React.FC<React.HTMLAttributes<HTMLDivElement>> = ({
-  children,
-  className = '',
-  ...props
-}) => {
-  return (
-    <div className={`p-5 ${className}`} {...props}>
-      {children}
-    </div>
-  );
-};
-
-export const CardFooter: React.FC<React.HTMLAttributes<HTMLDivElement>> = ({
-  children,
-  className = '',
-  ...props
-}) => {
-  return (
-    <div
-      className={`px-5 py-3.5 bg-slate-50/70 border-t border-slate-100 flex items-center justify-between text-sm ${className}`}
-      {...props}
-    >
-      {children}
-    </div>
-  );
-};
-

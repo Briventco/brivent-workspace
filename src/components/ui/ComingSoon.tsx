@@ -1,22 +1,18 @@
 import React from 'react';
-import { LucideIcon } from 'lucide-react';
 import { EmptyState } from './EmptyState';
+import { IconName } from './Icon';
 import { PageHeader } from './PageHeader';
 
 interface ComingSoonProps {
   title: string;
   description: string;
-  icon: LucideIcon;
+  icon: IconName;
 }
 
 /** Holds the place of a page until the backend supports it. */
-export const ComingSoon: React.FC<ComingSoonProps> = ({ title, description, icon: Icon }) => (
+export const ComingSoon: React.FC<ComingSoonProps> = ({ title, description, icon }) => (
   <>
     <PageHeader title={title} />
-    <EmptyState
-      icon={<Icon className="w-6 h-6" aria-hidden="true" />}
-      title="Coming soon"
-      description={description}
-    />
+    <EmptyState icon={icon} title="Coming soon" description={description} />
   </>
 );

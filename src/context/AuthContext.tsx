@@ -11,6 +11,7 @@ import { flushSync } from 'react-dom';
 import * as authApi from '../api/auth';
 import { ApiError, clearToken, getToken, setUnauthorizedHandler } from '../api/client';
 import { Session } from '../api/types';
+import { Action, can } from '../lib/permissions';
 import { navigate } from '../lib/router';
 import { useToast } from './ToastContext';
 
@@ -128,10 +129,7 @@ export const useSession = () => {
     throw new Error('useSession must be used behind authentication');
   }
 
-  const { user, permissions } = state.session;
-  const hasPermission = useCallback(
-    (permission: string) => permissions.includes(permission),
-    [permissions],
-  );
-  return { user, hasPermission };
+  const { session } = state;
+  const canDo = useCallback((action: Action) => can(session, action), [session]);
+  return { user: session.user, can: canDo };
 };

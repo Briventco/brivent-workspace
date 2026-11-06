@@ -1,17 +1,31 @@
 import React from 'react';
+import { Icon, IconName } from './Icon';
 
 interface EmptyStateProps {
-  icon: React.ReactNode;
+  icon: IconName;
   title: string;
-  description: string;
+  description: React.ReactNode;
+  tone?: 'brand' | 'danger' | 'neutral';
+  /** The one action, and only when this viewer can take it. */
   children?: React.ReactNode;
 }
 
-export const EmptyState: React.FC<EmptyStateProps> = ({ icon, title, description, children }) => (
-  <div className="flex flex-col items-center justify-center py-16 px-6 text-center rounded-xl border border-dashed border-slate-300 bg-white">
-    <div className="p-3 bg-brivent-50 text-brivent-600 rounded-xl mb-4">{icon}</div>
-    <h2 className="text-base font-semibold text-slate-900 mb-1">{title}</h2>
-    <p className="text-sm text-slate-600 max-w-md">{description}</p>
-    {children && <div className="mt-6">{children}</div>}
+const TONE_CLASS = { brand: '', danger: 'danger', neutral: 'neutral' };
+
+/** A soft icon tile, what happened, and what's next. */
+export const EmptyState: React.FC<EmptyStateProps> = ({
+  icon,
+  title,
+  description,
+  tone = 'brand',
+  children,
+}) => (
+  <div className="card empty">
+    <span className={`empty-icon ${TONE_CLASS[tone]}`}>
+      <Icon name={icon} size="lg" />
+    </span>
+    <h2 className="t-h3">{title}</h2>
+    <p>{description}</p>
+    {children && <div className="mt-1">{children}</div>}
   </div>
 );
