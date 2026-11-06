@@ -343,6 +343,65 @@
   right: 0;
 }
 
+/* Learning */
+:root {
+  --chart-mentor: var(--brand);
+  --chart-self: #c2570c;
+}
+
+:root[data-theme='dark'] {
+  --chart-self: #d96a1e;
+}
+
+.ring-track {
+  stroke: var(--border);
+}
+
+.ring-value {
+  stroke: var(--brand);
+}
+
+.skill-chart text {
+  fill: var(--text-2);
+  font-size: 11px;
+}
+
+.skill-chart .grid {
+  stroke: var(--border);
+  stroke-width: 1;
+}
+
+.skill-chart .is-mentor {
+  stroke: var(--chart-mentor);
+  fill: var(--chart-mentor);
+}
+
+.skill-chart .is-self {
+  stroke: var(--chart-self);
+  fill: var(--chart-self);
+}
+
+.chart-key {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: var(--r-full);
+  background: var(--chart-mentor);
+}
+
+.chart-key.is-self {
+  border-radius: 2px;
+  background: var(--chart-self);
+}
+
+.track-item.is-dragging {
+  opacity: 0.5;
+}
+
+.track-item.is-target {
+  box-shadow: inset 0 2px 0 var(--brand);
+}
+
 /* Messages */
 .messages-page {
   display: flex;

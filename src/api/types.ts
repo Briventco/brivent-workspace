@@ -116,6 +116,10 @@ export interface TaskSummary {
   upcomingMeetings?: number;
   unreadMessages?: number;
   unreadMentions?: number;
+  /** Left out for people with no active enrollment. */
+  learning?: LearningSummary;
+  /** Left out for people who don't mentor or review. */
+  learningReview?: { awaitingReview: number; learnersBehind: number };
 }
 
 export interface CheckinPerson extends PersonRef {
@@ -234,4 +238,161 @@ export interface Message {
   editedAt: string | null;
   deletedAt: string | null;
   createdAt: string;
+}
+
+export type TrackStatus = 'DRAFT' | 'PUBLISHED' | 'ARCHIVED';
+export type TrackItemType = 'RESOURCE' | 'ASSIGNMENT';
+export type EnrollmentStatus = 'ACTIVE' | 'PAUSED' | 'COMPLETED' | 'WITHDRAWN';
+export type LearningHealth = 'ON_TRACK' | 'BEHIND' | 'COMPLETED' | 'PAUSED';
+export type SkillTrend = 'UP' | 'DOWN' | 'FLAT' | 'NONE';
+export type ItemStatus = 'NOT_STARTED' | 'SUBMITTED' | 'CHANGES_REQUESTED' | 'COMPLETED';
+export type ReviewDecision = 'APPROVED' | 'CHANGES_REQUESTED';
+export type RatingKind = 'MENTOR' | 'SELF';
+
+export const MIN_TRACK_SKILLS = 2;
+export const MAX_TRACK_SKILLS = 8;
+export const MAX_LEARNERS = 100;
+
+export interface TrackSkill {
+  id: string;
+  name: string;
+  description: string;
+  sortOrder: number;
+}
+
+export interface TrackItem {
+  id: string;
+  type: TrackItemType;
+  title: string;
+  instructions: string;
+  resourceUrl: string | null;
+  estimatedMinutes: number | null;
+  /** Days after the enrollment's start date. */
+  dueDay: number | null;
+  sortOrder: number;
+  isArchived: boolean;
+  skillIds: string[];
+}
+
+export interface TrackModule {
+  id: string;
+  title: string;
+  description: string;
+  sortOrder: number;
+  items: TrackItem[];
+}
+
+export interface Track {
+  id: string;
+  title: string;
+  description: string;
+  status: TrackStatus;
+  department: Named | null;
+  position: Named | null;
+  createdBy: Named;
+  skills: TrackSkill[];
+  modules: TrackModule[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface NextItem {
+  id: string;
+  title: string;
+  /** A WAT calendar date. */
+  dueDate: string | null;
+}
+
+export interface LearningSummary {
+  activeTracks: number;
+  overdueItems: number;
+  nextItem: NextItem | null;
+}
+
+export interface SkillProgress {
+  skillId: string;
+  name: string;
+  firstMentorScore: number | null;
+  latestMentorScore: number | null;
+  latestSelfScore: number | null;
+  trend: SkillTrend;
+}
+
+export interface EnrollmentProgress {
+  percentComplete: number;
+  itemsCompleted: number;
+  itemsTotal: number;
+  overdueItems: number;
+  health: LearningHealth;
+  averageScore: number | null;
+  changesRequestedCount: number;
+  awaitingReview: number;
+  lastActivityAt: string | null;
+  nextItem: NextItem | null;
+  skills: SkillProgress[];
+}
+
+export interface Enrollment {
+  id: string;
+  track: { id: string; title: string };
+  learner: Named & { position: Named | null };
+  mentor: Named;
+  /** WAT calendar dates. */
+  startDate: string;
+  targetEndDate: string | null;
+  status: EnrollmentStatus;
+  completedAt: string | null;
+  createdAt: string;
+  progress: EnrollmentProgress;
+}
+
+export interface Submission {
+  id: string;
+  enrollmentId: string;
+  itemId: string;
+  link: string | null;
+  note: string;
+  submittedAt: string;
+  reviewedAt: string | null;
+  decision: ReviewDecision | null;
+  feedback: string | null;
+  score: number | null;
+  reviewedBy: Named | null;
+}
+
+export interface ReviewRequest extends Submission {
+  item: { id: string; title: string };
+  track: { id: string; title: string };
+  learner: Named;
+}
+
+export interface EnrollmentItem extends TrackItem {
+  dueDate: string | null;
+  isOverdue: boolean;
+  status: ItemStatus;
+  completedAt: string | null;
+  /** How many times it's been submitted. The API only sends the latest one. */
+  attempts: number;
+  latestSubmission: Submission | null;
+}
+
+export interface EnrollmentModule {
+  id: string;
+  title: string;
+  description: string;
+  items: EnrollmentItem[];
+}
+
+export interface EnrollmentDetail extends Enrollment {
+  modules: EnrollmentModule[];
+}
+
+export interface SkillRating {
+  id: string;
+  skillId: string;
+  kind: RatingKind;
+  score: number;
+  note: string | null;
+  createdAt: string;
+  ratedBy: Named;
 }

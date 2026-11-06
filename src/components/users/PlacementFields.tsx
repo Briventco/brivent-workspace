@@ -45,7 +45,7 @@ interface PlacementFieldsProps {
   /** Bumped by the parent to re-read the options, such as after one was archived. */
   refreshKey?: number;
   /** Who's being edited. They keep an archived option, which the API no longer lists. */
-  user?: User;
+  user?: Pick<User, 'department' | 'position'>;
 }
 
 export const PlacementFields: React.FC<PlacementFieldsProps> = ({

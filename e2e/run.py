@@ -28,7 +28,7 @@ WIDE = {"width": 1440, "height": 900}
 NARROW = {"width": 1100, "height": 800}
 GALLERY = f"{APP}/design-system"
 # Pages built from this list; each must load at phone width without sideways scrolling.
-PAGES = ["/", "/tasks", "/messages", "/directory", "/settings"]
+PAGES = ["/", "/tasks", "/messages", "/learning", "/directory", "/settings"]
 
 results = []
 console_problems = []
@@ -231,6 +231,8 @@ def main():
                     run_multi_assignee(browser, admin_token)
                     if "unreadMessages" in call("GET", "/tasks/summary", admin_token)["summary"]:
                         run_messages(browser, admin_token)
+                    if "learning.view" in call("GET", "/me", admin_token)["user"]["permissions"]:
+                        run_learning(browser, admin_token)
             run_team_lead(browser, lead_task, lead_name, intern_name)
             run_permissions(lead_email, lead_password)
             run_intern(browser, lead_task, admin_task)
@@ -2135,6 +2137,405 @@ def run_messages(browser, admin_token):
     receiver.context.close()
     for person in (ana, ben):
         call("POST", f"/users/{person['id']}/deactivate", admin_token)
+
+
+def add_track_item(page, module, kind, title, day=None, link=None, skill=None):
+    card = page.locator(".card", has=page.get_by_role("button", name=f"Rename {module}"))
+    card.get_by_role("button", name="Add item").click()
+    panel = page.get_by_role("dialog", name="New item")
+    panel.get_by_label("Type").select_option(kind)
+    panel.get_by_label("Title").fill(title)
+    if link:
+        panel.get_by_label(re.compile("^Link")).fill(link)
+    if day is not None:
+        panel.get_by_label(re.compile("^Due day")).fill(str(day))
+    if skill:
+        panel.get_by_label(skill).check()
+    panel.get_by_role("button", name="Add item").click()
+    expect(page.get_by_text(title, exact=True)).to_be_visible()
+
+
+def add_track_module(page, title):
+    page.get_by_label("New module").fill(title)
+    page.get_by_role("button", name="Add module").click()
+    expect(page.get_by_role("button", name=f"Rename {title}")).to_be_visible()
+
+
+def open_track_item(page, title):
+    page.get_by_role("button", name=re.compile(re.escape(title))).click()
+    return page.get_by_role("dialog", name=title)
+
+
+def run_learning(browser, admin_token):
+    lead_auth = call("POST", "/auth/login", body=dict(zip(("email", "password"), credentials("TEAM_LEAD"))))
+    intern_auth = call("POST", "/auth/login", body=dict(zip(("email", "password"), credentials("INTERN"))))
+    lead_token, lead_user = lead_auth["token"], lead_auth["user"]
+    intern_token, intern_user = intern_auth["token"], intern_auth["user"]
+    late = active_user(admin_token, f"E2E Late Learner {RUN}", f"e2e.late.{RUN}@example.test")
+    late_token = call("POST", "/auth/login", body={"email": late["email"], "password": late["password"]})["token"]
+
+    title = f"{PREFIX} Frontend basics"
+    skill_one, skill_two = f"React {RUN}", f"Testing {RUN}"
+    guide, page_work, wrap_up = f"Read the guide {RUN}", f"Build a page {RUN}", f"Wrap up {RUN}"
+    state = {}
+
+    lead = new_page(browser)
+    learner = new_page(browser)
+    log_in(lead, "TEAM_LEAD")
+    log_in(learner, "INTERN")
+
+    def hidden_without_enrollment():
+        expect(learner.get_by_role("link", name="Daily Check-in")).to_be_visible()
+        expect(learner.get_by_role("link", name="Learning", exact=True)).to_have_count(0)
+        learner.goto(f"{APP}/learning")
+        expect(learner.get_by_role("heading", name="No learning yet")).to_be_visible()
+        expect(learner.get_by_role("button", name="New track")).to_have_count(0)
+
+    step("learning: no sidebar item without an enrollment, and a clear empty page", hidden_without_enrollment)
+
+    def role_tabs():
+        open_nav_link(lead, "Learning")
+        tabs = lead.get_by_role("tablist", name="Learning views")
+        for name in ("Review queue", "My learners", "Tracks"):
+            expect(tabs.get_by_role("tab", name=name)).to_be_visible()
+        expect(tabs.get_by_role("tab", name="All learners")).to_have_count(0)
+        expect(tabs.get_by_role("tab", name="My learning")).to_have_count(0)
+        expect(lead.get_by_role("heading", name="Nothing waiting for review")).to_be_visible()
+
+    step("learning: a Team Lead gets the reviewer tabs, without All learners", role_tabs)
+
+    def build_track():
+        lead.get_by_role("button", name="New track").click()
+        dialog = lead.get_by_role("dialog", name="New track")
+        dialog.get_by_label("Title").fill(title)
+        dialog.get_by_role("button", name="Create track").click()
+        expect(lead.get_by_role("heading", name=title)).to_be_visible()
+        expect(lead).to_have_url(re.compile(r"/learning/tracks/[0-9a-f-]{36}$"))
+        state["track"] = lead.url.rsplit("/", 1)[1]
+        expect(lead.get_by_role("button", name="Publish")).to_be_disabled()
+
+        lead.get_by_label(re.compile("^Description")).fill("The first month.")
+        lead.get_by_role("button", name="Save details").click()
+        expect(lead.get_by_text("Track saved.")).to_be_visible()
+
+        for skill in (skill_one, skill_two):
+            lead.get_by_label("New skill").fill(skill)
+            lead.get_by_role("button", name="Add", exact=True).click()
+            expect(lead.get_by_role("button", name=f"Rename {skill}")).to_be_visible()
+
+        add_track_module(lead, "Week 1")
+        add_track_module(lead, "Week 2")
+        add_track_item(lead, "Week 1", "RESOURCE", wrap_up, day=5, link="https://example.test/wrap")
+        add_track_item(lead, "Week 1", "RESOURCE", guide, day=1, link="https://example.test/guide")
+        add_track_item(lead, "Week 2", "ASSIGNMENT", page_work, day=3, skill=skill_one)
+
+    step("learning: build a draft with details, skills, modules and items", build_track)
+
+    def bad_link():
+        card = lead.locator(".card", has=lead.get_by_role("button", name="Rename Week 2"))
+        card.get_by_role("button", name="Add item").click()
+        panel = lead.get_by_role("dialog", name="New item")
+        panel.get_by_label("Title").fill("Insecure")
+        panel.get_by_label(re.compile("^Link")).fill("http://example.test")
+        panel.get_by_role("button", name="Add item").click()
+        expect(panel.get_by_text("Use a full https link.")).to_be_visible()
+        panel.get_by_role("button", name="Close").click()
+
+    step("learning: an item link must be https", bad_link)
+
+    def titles():
+        track = call("GET", f"/learning/tracks/{state['track']}", lead_token)["track"]
+        return [[item["title"] for item in module["items"]] for module in track["modules"]]
+
+    def reorder():
+        rows = lead.locator(".track-item")
+        rows.filter(has_text=guide).drag_to(rows.filter(has_text=wrap_up))
+        expect(rows.first).to_contain_text(guide)
+        assert titles() == [[guide, wrap_up], [page_work]], titles()
+
+        lead.get_by_role("button", name=f"Move {wrap_up} down").click()
+        expect(lead.locator(".card", has=lead.get_by_role("button", name="Rename Week 2")).locator(".track-item").first).to_contain_text(wrap_up)
+        assert titles() == [[guide], [wrap_up, page_work]], titles()
+
+        lead.get_by_role("button", name=f"Move {page_work} up").click()
+        expect(lead.locator(".card", has=lead.get_by_role("button", name="Rename Week 2")).locator(".track-item").first).to_contain_text(page_work)
+        assert titles() == [[guide], [page_work, wrap_up]], titles()
+
+    step("learning: drag and arrow buttons reorder items, across modules too", reorder)
+
+    def publish_and_enroll():
+        lead.get_by_role("button", name="Publish").click()
+        expect(lead.get_by_text(re.compile("^Published ·"))).to_be_visible()
+        lead.get_by_role("button", name="Enroll learners").click()
+        dialog = lead.get_by_role("dialog", name="Enroll learners")
+        expect(dialog.get_by_label("Track")).to_have_value(state["track"])
+        dialog.get_by_role("button", name="Enroll", exact=True).click()
+        expect(dialog.get_by_text("Choose at least one learner.")).to_be_visible()
+        pick_assignee(dialog, intern_user["name"], "Learners")
+        expect(dialog.get_by_label("Mentor").locator("option", has_text=intern_user["name"])).to_have_count(0)
+        dialog.get_by_label("Mentor").select_option(lead_user["id"])
+        dialog.get_by_role("button", name="Enroll", exact=True).click()
+        expect(lead.get_by_text("Enrolled 1 learner.")).to_be_visible()
+
+    step("learning: publish, then enroll a learner with a mentor", publish_and_enroll)
+
+    def double_enroll():
+        lead.get_by_role("button", name="Enroll learners").click()
+        dialog = lead.get_by_role("dialog", name="Enroll learners")
+        pick_assignee(dialog, intern_user["name"], "Learners")
+        dialog.get_by_label("Mentor").select_option(lead_user["id"])
+        dialog.get_by_role("button", name="Enroll", exact=True).click()
+        expect(dialog.get_by_text(re.compile("Nobody was enrolled"))).to_be_visible()
+        dialog.get_by_role("button", name="Cancel").click()
+
+    step("learning: enrolling someone twice says nobody was added", double_enroll)
+
+    def foreign_track():
+        track = call("POST", "/learning/tracks", admin_token, {"title": f"{PREFIX} Admin track"})["track"]
+        lead.goto(f"{APP}/learning/tracks/{track['id']}")
+        expect(lead.get_by_role("heading", name=f"{PREFIX} Admin track")).to_be_visible()
+        expect(lead.get_by_role("button", name="Publish")).to_have_count(0)
+        expect(lead.get_by_role("button", name="Add module")).to_have_count(0)
+        expect(lead.get_by_role("button", name="Save details")).to_have_count(0)
+        expect(lead.get_by_label("Title")).to_be_disabled()
+
+    step("learning: a Team Lead can read someone else's track, but not edit it", foreign_track)
+
+    def my_learning():
+        learner.goto(f"{APP}/")
+        expect(learner.get_by_role("link", name="Learning", exact=True)).to_be_visible()
+        expect(learner.get_by_role("link", name="Open my learning")).to_contain_text(guide)
+        learner.get_by_role("link", name="Open my learning").click()
+        card = learner.get_by_role("link", name=re.compile(re.escape(title)))
+        expect(card).to_contain_text("On track")
+        expect(card).to_contain_text("Next up")
+        expect(card).to_contain_text(guide)
+        expect(card.get_by_role("img", name=re.compile("0% complete"))).to_be_visible()
+        card.click()
+        expect(learner.get_by_role("heading", name=title)).to_be_visible()
+        state["enrollment"] = learner.url.rsplit("/", 1)[1]
+
+    step("learning: the dashboard and My learning show progress, health and next up", my_learning)
+
+    def resource():
+        panel = open_track_item(learner, guide)
+        expect(panel.get_by_role("link", name="Open link")).to_have_attribute("href", "https://example.test/guide")
+        panel.get_by_role("button", name="Mark as done").click()
+        expect(learner.get_by_text("Marked as done.")).to_be_visible()
+        expect(learner.get_by_role("button", name=re.compile(re.escape(guide)))).to_contain_text("Done")
+        expect(learner.get_by_role("img", name=re.compile("33% complete"))).to_be_visible()
+
+    step("learning: a resource opens its link and can be marked as done", resource)
+
+    def submit():
+        panel = open_track_item(learner, page_work)
+        panel.get_by_role("button", name="Submit", exact=True).click()
+        expect(panel.get_by_text("Add a short note for your reviewer.")).to_be_visible()
+        panel.get_by_label(re.compile("^Link to your work")).fill("http://insecure.test")
+        panel.get_by_label("Note").fill("Ready for review.")
+        panel.get_by_role("button", name="Submit", exact=True).click()
+        expect(panel.get_by_text("Use a full https link.")).to_be_visible()
+        panel.get_by_label(re.compile("^Link to your work")).fill("https://example.test/first")
+        panel.get_by_role("button", name="Submit", exact=True).click()
+        expect(learner.get_by_role("button", name=re.compile(re.escape(page_work)))).to_contain_text("Waiting for review")
+
+    step("learning: an assignment takes a link and note, checked before sending", submit)
+
+    def request_changes():
+        lead.goto(f"{APP}/")
+        tile = lead.get_by_role("link", name=re.compile("^Awaiting review"))
+        expect(tile).to_contain_text("1")
+        tile.click()
+        lead.get_by_role("button", name=re.compile(re.escape(page_work))).click()
+        panel = lead.get_by_role("dialog", name=page_work)
+        expect(panel.get_by_role("link", name="https://example.test/first")).to_be_visible()
+        expect(panel.get_by_text("Ready for review.")).to_be_visible()
+        panel.get_by_role("button", name="Request changes").click()
+        expect(panel.get_by_text("Say what needs to change.")).to_be_visible()
+        panel.get_by_label("Feedback").fill("Add the empty state.")
+        panel.get_by_role("group", name="Score").get_by_role("button", name="2 out of 5").click()
+        panel.get_by_role("button", name="Request changes").click()
+        expect(lead.get_by_role("heading", name="Nothing waiting for review")).to_be_visible()
+
+    step("learning: the review queue opens the work, and changes need feedback", request_changes)
+
+    def resubmit():
+        learner.reload()
+        row = learner.get_by_role("button", name=re.compile(re.escape(page_work)))
+        expect(row).to_contain_text("Changes requested")
+        row.click()
+        panel = learner.get_by_role("dialog", name=page_work)
+        expect(panel.get_by_text("Add the empty state.")).to_be_visible()
+        expect(panel.get_by_text("Score 2 of 5")).to_be_visible()
+        panel.get_by_label("Note").fill("Added it.")
+        panel.get_by_role("button", name="Resubmit").click()
+        expect(row).to_contain_text("Waiting for review")
+
+    step("learning: requested changes show the feedback and offer Resubmit", resubmit)
+
+    def approve():
+        lead.goto(f"{APP}/learning?tab=reviews")
+        lead.get_by_role("button", name=re.compile(re.escape(page_work))).click()
+        panel = lead.get_by_role("dialog", name=page_work)
+        expect(panel.get_by_text("Latest submission · attempt 2")).to_be_visible()
+        panel.get_by_role("group", name="Score").get_by_role("button", name="4 out of 5").click()
+        panel.get_by_role("button", name="Approve").click()
+        expect(lead.get_by_role("heading", name="Nothing waiting for review")).to_be_visible()
+
+    step("learning: a reviewer approves the second attempt with a score", approve)
+
+    def rate_self():
+        learner.reload()
+        learner.get_by_role("button", name="Rate myself").click()
+        dialog = learner.get_by_role("dialog", name="Rate myself")
+        expect(dialog.get_by_role("button", name="Save ratings")).to_be_disabled()
+        dialog.get_by_role("group", name=skill_one).get_by_role("button", name="3 out of 5").click()
+        dialog.get_by_role("button", name="Save ratings").click()
+        row = learner.get_by_role("row", name=re.compile(skill_one))
+        expect(row.get_by_role("cell").nth(2)).to_have_text("3")
+
+    step("learning: a learner rates themselves, and the score shows", rate_self)
+
+    def mentor_page():
+        lead.goto(f"{APP}/learning/enrollments/{state['enrollment']}")
+        expect(lead.get_by_role("heading", name=title)).to_be_visible()
+        expect(lead.get_by_text("Changes requested", exact=True).first).to_be_visible()
+        expect(lead.get_by_text("4 of 5")).to_be_visible()
+        expect(lead.get_by_role("heading", name="Skill ratings over time")).to_be_visible()
+
+        for score in ("2", "4"):
+            lead.get_by_role("button", name="Rate skills").click()
+            dialog = lead.get_by_role("dialog", name="Rate skills")
+            dialog.get_by_role("group", name=skill_one).get_by_role("button", name=f"{score} out of 5").click()
+            dialog.get_by_role("button", name="Save ratings").click()
+            expect(dialog).to_be_hidden()
+
+        row = lead.get_by_role("row", name=re.compile(skill_one)).first
+        expect(row.get_by_role("cell").nth(1)).to_have_text("4")
+        expect(row.get_by_title("Improving")).to_be_visible()
+        expect(lead.get_by_role("img", name=re.compile(f"^{skill_one}: 3 ratings"))).to_be_visible()
+        lead.get_by_text("View as a table").click()
+        expect(lead.get_by_role("table", name="Every skill rating").get_by_role("row")).to_have_count(4)
+
+        open_track_item(lead, wrap_up)
+        panel = lead.get_by_role("dialog", name=wrap_up)
+        expect(panel.get_by_role("button", name="Mark as done")).to_have_count(0)
+        panel.get_by_role("button", name="Close").click()
+
+    step("learning: the mentor sees the chart, scores and Rate skills, but can't do the work", mentor_page)
+
+    def finish():
+        learner.reload()
+        panel = open_track_item(learner, wrap_up)
+        panel.get_by_role("button", name="Mark as done").click()
+        expect(learner.get_by_role("img", name=re.compile("100% complete"))).to_be_visible()
+        expect(learner.locator("main").get_by_text("Completed", exact=True)).to_be_visible()
+
+    step("learning: finishing the last item completes the track", finish)
+
+    def behind_first():
+        long_ago = call("GET", "/learning/tracks", lead_token)["tracks"]
+        assert any(track["id"] == state["track"] for track in long_ago)
+        start = (datetime.now(timezone.utc) - timedelta(days=12)).strftime("%Y-%m-%d")
+        enrolled = call(
+            "POST",
+            "/learning/enrollments",
+            lead_token,
+            {"trackId": state["track"], "learnerIds": [late["id"]], "mentorId": lead_user["id"], "startDate": start},
+        )["enrollments"][0]
+        state["late_enrollment"] = enrolled["id"]
+
+        lead.goto(f"{APP}/")
+        behind = lead.get_by_role("link", name=re.compile("^Learners behind"))
+        expect(behind).to_contain_text("1")
+        behind.click()
+        expect(lead).to_have_url(re.compile("tab=learners&health=BEHIND"))
+        table = lead.get_by_role("region", name="Learners")
+        expect(table).to_contain_text(late["name"])
+        expect(table).not_to_contain_text(intern_user["name"])
+
+        lead.get_by_label("Health").select_option("")
+        expect(table).to_contain_text(intern_user["name"])
+        expect(table.get_by_role("row").nth(1)).to_contain_text(late["name"])
+        expect(table.get_by_role("row").nth(2)).to_contain_text("Completed")
+
+        lead.get_by_label("Health").select_option("PAUSED")
+        expect(lead.get_by_role("heading", name="Nobody matches this filter")).to_be_visible()
+        lead.get_by_role("button", name="Clear filter").click()
+        expect(lead.get_by_role("region", name="Learners")).to_be_visible()
+
+    step("learning: Learners behind links to a filtered table, with Behind first", behind_first)
+
+    def all_learners():
+        admin = new_page(browser)
+        log_in(admin, "SUPER_ADMIN")
+        admin.goto(f"{APP}/learning?tab=all")
+        tabs = admin.get_by_role("tablist", name="Learning views")
+        expect(tabs.get_by_role("tab", name="All learners")).to_have_attribute("aria-selected", "true")
+        table = admin.get_by_role("region", name="Learners")
+        expect(table).to_contain_text(late["name"])
+        table.get_by_role("link", name=late["name"]).click()
+        admin.get_by_role("button", name="Pause").click()
+        admin.get_by_role("dialog").get_by_role("button", name="Pause").click()
+        expect(admin.locator("main").get_by_text("Paused", exact=True)).to_be_visible()
+        admin.context.close()
+
+        page = new_page(browser)
+        log_in_as(page, late["email"], late["password"])
+        page.goto(f"{APP}/learning/enrollments/{state['late_enrollment']}")
+        panel = open_track_item(page, guide)
+        expect(panel.get_by_role("link", name="Open link")).to_be_visible()
+        expect(panel.get_by_role("button", name="Mark as done")).to_have_count(0)
+        page.context.close()
+
+    step("learning: All learners for admins, and pausing stops a learner's actions", all_learners)
+
+    def no_access():
+        page = new_page(browser)
+        log_in_as(page, late["email"], late["password"])
+        page.goto(f"{APP}/learning/enrollments/{state['enrollment']}")
+        expect(page.get_by_role("heading", name="This learning record isn't yours to see")).to_be_visible()
+        expect(page.get_by_role("link", name="Back to learning")).to_be_visible()
+        page.goto(f"{APP}/learning/tracks/{state['track']}")
+        expect(page.get_by_role("heading", name="You don't have access to this")).to_be_visible()
+        page.context.close()
+
+    step("learning: someone else's progress and the builder show no access", no_access)
+
+    def failures():
+        def refuse(route):
+            return route.fulfill(status=500, json={"error": {"code": "E2E", "message": "Server trouble."}})
+
+        learner.route("**/api/learning/enrollments?*", refuse)
+        learner.goto(f"{APP}/learning")
+        expect(learner.get_by_role("heading", name="Couldn't load your learning")).to_be_visible()
+        learner.unroute("**/api/learning/enrollments?*")
+        learner.get_by_role("button", name="Try again").click()
+        expect(learner.get_by_role("link", name=re.compile(re.escape(title)))).to_be_visible()
+
+    step("learning: a failed load offers Try again", failures)
+
+    def fits_every_width():
+        for viewport in (MOBILE, {"width": 1280, "height": 800}, WIDE):
+            label = f"at {viewport['width']}"
+            page = new_page(browser, viewport)
+            log_in(page, "TEAM_LEAD")
+            for path in (
+                "/learning?tab=learners",
+                "/learning?tab=tracks",
+                f"/learning/tracks/{state['track']}",
+                f"/learning/enrollments/{state['enrollment']}",
+            ):
+                page.goto(f"{APP}{path}")
+                expect(page.get_by_text(re.compile(re.escape(RUN))).first).to_be_visible()
+                expect_no_sideways_scroll(page, f"{path} {label}")
+            page.context.close()
+
+    step("learning: reviewer pages fit 375, 1280 and 1440", fits_every_width)
+
+    lead.context.close()
+    learner.context.close()
+    call("POST", f"/users/{late['id']}/deactivate", admin_token)
 
 
 def run_departments(browser, admin_token):
