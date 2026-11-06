@@ -300,3 +300,87 @@
     padding: 0 16px;
   }
 }
+
+/* Dashboard */
+.checkin-card {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 16px 20px;
+  border-radius: var(--r-lg);
+  background: var(--ink);
+  color: #ffffff;
+}
+
+.checkin-card-icon {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: var(--r-md);
+  background: var(--nav-active);
+  color: var(--lavender);
+}
+
+.workload {
+  display: flex;
+  height: 6px;
+  overflow: hidden;
+  border-radius: var(--r-full);
+  background: var(--todo-bg);
+}
+
+.workload .w-over {
+  background: var(--danger);
+}
+
+.workload .w-open {
+  background: var(--brand);
+}
+
+.compact-rows .li .pr,
+.compact-rows .li .text-right {
+  display: none;
+}
+
+.compact-rows .li .badge {
+  padding-left: 6px;
+  padding-right: 6px;
+}
+
+@media (max-width: 767px) {
+  .kpi {
+    gap: 2px;
+    padding: 10px 12px;
+  }
+
+  .kpi .v {
+    font-size: 20px;
+    line-height: 26px;
+  }
+
+  .kpi .k {
+    font-size: 12px;
+  }
+
+  .kpi .k .ms,
+  .kpi-hint:not(:has(.bar)) {
+    display: none;
+  }
+
+  .checkin-card {
+    padding: 12px 16px;
+  }
+
+  .checkin-card-icon {
+    width: auto;
+    height: auto;
+    background: none;
+  }
+}
+
+.count.alert {
+  background: var(--danger-bg);
+  color: var(--danger);
+}

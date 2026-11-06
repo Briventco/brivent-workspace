@@ -4,18 +4,20 @@ import { ApiQuery } from '../../lib/useApiQuery';
 import { Link } from '../../lib/router';
 import { Button } from './Button';
 import { EmptyState } from './EmptyState';
+import { IconName } from './Icon';
 import { SkeletonList } from './Skeleton';
 
 export const LoadingState: React.FC<{ label?: string }> = ({ label }) => (
   <SkeletonList label={label} />
 );
 
-export const ErrorState: React.FC<{ title?: string; message: string; onRetry?: () => void }> = ({
-  title = "Couldn't load this",
-  message,
-  onRetry,
-}) => (
-  <EmptyState icon="error" tone="danger" title={title} description={message}>
+export const ErrorState: React.FC<{
+  title?: string;
+  message: string;
+  icon?: IconName;
+  onRetry?: () => void;
+}> = ({ title = "Couldn't load this", message, icon = 'error', onRetry }) => (
+  <EmptyState icon={icon} tone="danger" title={title} description={message}>
     {onRetry && (
       <Button variant="secondary" icon="refresh" onClick={onRetry}>
         Try again

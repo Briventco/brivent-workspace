@@ -22,27 +22,48 @@ export const CardFooter: React.FC<DivProps> = ({ className = '', ...props }) => 
 
 interface StatCardProps {
   label: string;
+  /** A shorter label for phones, where the card is a third of the screen. */
+  phoneLabel?: string;
   value: React.ReactNode;
   icon?: IconName;
-  hint?: string;
+  hint?: React.ReactNode;
   /** Marks a number that needs action, such as overdue work. */
   attention?: boolean;
   /** Every number is a link to the list behind it. */
   to?: string;
+  className?: string;
 }
 
-export const StatCard: React.FC<StatCardProps> = ({ label, value, icon, hint, attention, to }) => {
+export const StatCard: React.FC<StatCardProps> = ({
+  label,
+  phoneLabel,
+  value,
+  icon,
+  hint,
+  attention,
+  to,
+  className: extraClass = '',
+}) => {
   const body = (
     <>
       <span className={`k ${attention ? 'text-danger' : ''}`}>
         {icon && <Icon name={icon} size="sm" />}
-        {label}
+        {phoneLabel ? (
+          <>
+            <span className="md:hidden" aria-hidden="true">
+              {phoneLabel}
+            </span>
+            <span className="max-md:sr-only">{label}</span>
+          </>
+        ) : (
+          label
+        )}
       </span>
       <span className={`v ${attention ? 'text-danger' : ''}`}>{value}</span>
-      {hint && <span className="text-caption text-text-3">{hint}</span>}
+      {hint && <span className="kpi-hint text-caption text-text-3">{hint}</span>}
     </>
   );
-  const className = `card kpi ${attention ? 'attn' : ''}`;
+  const className = `card kpi ${attention ? 'attn' : ''} ${extraClass}`;
 
   return to ? (
     <Link to={to} className={`${className} no-underline hover:no-underline text-text`}>

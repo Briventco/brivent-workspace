@@ -94,6 +94,45 @@ export interface TaskSummary {
   overdue: number;
   doneThisWeek: number;
   weekStart: string;
+  /** Each of these arrives with its backend feature. The dashboard only shows what's sent. */
+  checkedInToday?: boolean;
+  teamCheckins?: { submitted: number; notSubmitted: number; openBlockers: number };
+  upcomingMeetings?: number;
+}
+
+export interface CheckinPerson extends PersonRef {
+  role: Role;
+}
+
+export interface CheckinReply {
+  id: string;
+  author: PersonRef;
+  body: string;
+  createdAt: string;
+}
+
+export interface LinkedTask {
+  id: string;
+  title: string;
+  status: TaskStatus;
+}
+
+export interface Checkin {
+  id: string;
+  user: CheckinPerson;
+  /** The WAT calendar date as YYYY-MM-DD. Never pass it through a browser timezone. */
+  date: string;
+  workCompleted: string;
+  priorities: string;
+  blockers: string | null;
+  blockerHandled: boolean;
+  blockerHandledBy: PersonRef | null;
+  isLate: boolean;
+  submittedAt: string;
+  updatedAt: string;
+  editable: boolean;
+  linkedTasks: LinkedTask[];
+  replies: CheckinReply[];
 }
 
 export interface DirectoryUser extends PersonRef {
