@@ -40,7 +40,7 @@ const ROUTES: Record<string, AppRoute> = {
     action: 'viewOwnTasks',
   },
   '/projects': { title: 'Projects', element: <ProjectsView />, action: 'viewProjects' },
-  '/messages': { title: 'Internal Messages', element: <MessagesView /> },
+  '/messages': { title: 'Internal Messages', element: <MessagesView />, action: 'useMessages' },
   '/calendar': { title: 'Meetings & Schedule', element: <CalendarView />, action: 'viewMeetings' },
   '/docs': { title: 'Knowledge & SOPs', element: <DocumentsView /> },
   '/directory': {
@@ -100,6 +100,15 @@ export function resolveRoute(pathname: string): AppRoute | undefined {
       title: 'Project',
       element: <ProjectDetailView key={projectId} projectId={projectId} />,
       action: 'viewProjects',
+    };
+  }
+  const conversationId = pathname.match(/^\/messages\/([^/]+)$/)?.[1];
+  if (conversationId) {
+    // No key: moving between conversations keeps the list on screen.
+    return {
+      title: 'Internal Messages',
+      element: <MessagesView conversationId={conversationId} />,
+      action: 'useMessages',
     };
   }
   return ROUTES[pathname];

@@ -1,6 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import { usePathname } from '../../lib/router';
 import { BottomBar } from './BottomBar';
+import { isNavActive } from './navItems';
 import { Sidebar } from './Sidebar';
 import { TopNavbar } from './TopNavbar';
 import { useSidebarCollapsed } from './useSidebarCollapsed';
@@ -9,6 +10,8 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
   const pathname = usePathname();
   const { isCollapsed, toggle } = useSidebarCollapsed();
   const mainRef = useRef<HTMLElement>(null);
+  const isMessages = isNavActive('/messages', pathname);
+  const isConversation = pathname.startsWith('/messages/');
   const isFirstRender = useRef(true);
 
   // Moves focus with the page, so keyboard and screen reader users land on the new content.
@@ -33,18 +36,23 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
       <Sidebar isCollapsed={isCollapsed} onToggle={toggle} />
 
       <div className={`flex flex-col min-h-screen ${isCollapsed ? 'md:pl-16' : 'md:pl-[248px]'}`}>
-        <TopNavbar />
+        <TopNavbar hideOnPhone={isConversation} />
         <main
           id="main-content"
           ref={mainRef}
           tabIndex={-1}
-          className="grow w-full max-w-[1240px] px-4 pt-5 pb-24 md:px-8 md:pt-7 md:pb-12"
+          className={
+            isMessages
+              ? 'grow w-full min-w-0'
+              : 'grow w-full max-w-[1240px] px-4 pt-5 pb-24 md:px-8 md:pt-7 md:pb-12'
+          }
         >
           {children}
         </main>
       </div>
 
-      <BottomBar />
+      {/* An open conversation on a phone is its own screen, with the composer at the bottom. */}
+      {!isConversation && <BottomBar />}
     </div>
   );
 };

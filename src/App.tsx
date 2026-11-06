@@ -4,6 +4,7 @@ import { Session } from './api/types';
 import { AppShell } from './components/layout/AppShell';
 import { ErrorState, LoadingState, NoAccess } from './components/ui/AsyncState';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import { RealtimeProvider } from './context/RealtimeContext';
 import { ToastProvider } from './context/ToastContext';
 import { can } from './lib/permissions';
 import { navigate, usePathname } from './lib/router';
@@ -90,9 +91,11 @@ const Root: React.FC = () => {
   if (session.user.mustChangePassword) return <ForcePasswordChangeView />;
 
   return (
-    <AppShell>
-      <AuthenticatedPage session={session} pathname={pathname} />
-    </AppShell>
+    <RealtimeProvider>
+      <AppShell>
+        <AuthenticatedPage session={session} pathname={pathname} />
+      </AppShell>
+    </RealtimeProvider>
   );
 };
 

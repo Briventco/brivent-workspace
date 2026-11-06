@@ -28,7 +28,7 @@ WIDE = {"width": 1440, "height": 900}
 NARROW = {"width": 1100, "height": 800}
 GALLERY = f"{APP}/design-system"
 # Pages built from this list; each must load at phone width without sideways scrolling.
-PAGES = ["/", "/tasks", "/directory", "/settings"]
+PAGES = ["/", "/tasks", "/messages", "/directory", "/settings"]
 
 results = []
 console_problems = []
@@ -115,8 +115,8 @@ def open_nav_link(page, name):
     page.get_by_role("navigation", name="Main").get_by_role("link", name=re.compile(name)).click()
 
 
-def pick_assignee(dialog, name):
-    picker = dialog.get_by_role("combobox", name="Assignee")
+def pick_assignee(dialog, name, label="Assignee"):
+    picker = dialog.get_by_role("combobox", name=label)
     picker.click()
     picker.fill(name.split()[0])
     dialog.get_by_role("option", name=re.compile(re.escape(name))).click()
@@ -229,6 +229,8 @@ def main():
                     run_meetings(browser, admin_token)
                     run_departments(browser, admin_token)
                     run_multi_assignee(browser, admin_token)
+                    if "unreadMessages" in call("GET", "/tasks/summary", admin_token)["summary"]:
+                        run_messages(browser, admin_token)
             run_team_lead(browser, lead_task, lead_name, intern_name)
             run_permissions(lead_email, lead_password)
             run_intern(browser, lead_task, admin_task)
@@ -1528,6 +1530,613 @@ def run_multi_assignee(browser, admin_token):
         call("POST", f"/users/{person['id']}/deactivate", admin_token)
 
 
+# Lets a test cut the socket while REST keeps working, which is the state polling exists for.
+SOCKET_SPY = """
+const NativeSocket = window.WebSocket;
+window.__sockets = [];
+window.WebSocket = class extends NativeSocket {
+  constructor(url, ...rest) {
+    if (window.__blockSockets) throw new Error('Blocked by the test');
+    super(url, ...rest);
+    window.__sockets.push(this);
+  }
+};
+"""
+
+
+def message_box(page, label):
+    return page.get_by_role("combobox", name=f"Message {label}")
+
+
+def message_list(page):
+    return page.get_by_role("list", name=re.compile("^Messages in"))
+
+
+def send_message(page, label, text):
+    box = message_box(page, label)
+    box.fill(text)
+    box.press("Enter")
+
+
+def open_conversation(page, name):
+    page.get_by_role("link", name=re.compile(rf"^{re.escape(name)}\b")).click()
+
+
+def conversation_named(token, name):
+    conversations = call("GET", "/conversations", token)["conversations"]
+    return next(c for c in conversations if c["name"] == name or (c["otherUser"] or {}).get("name") == name)
+
+
+def post_message(token, conversation_id, body):
+    return call(
+        "POST",
+        f"/conversations/{conversation_id}/messages",
+        token,
+        {"body": body, "clientId": f"e2e-{time.time_ns()}"},
+    )["message"]
+
+
+def run_messages(browser, admin_token):
+    lead_auth = call("POST", "/auth/login", body=dict(zip(("email", "password"), credentials("TEAM_LEAD"))))
+    intern_auth = call("POST", "/auth/login", body=dict(zip(("email", "password"), credentials("INTERN"))))
+    lead_token, lead_user = lead_auth["token"], lead_auth["user"]
+    intern_token, intern_user = intern_auth["token"], intern_auth["user"]
+    general_id = conversation_named(intern_token, "general")["id"]
+    public_channel = f"e2e-open-{RUN}"
+    private_channel = f"e2e-private-{RUN}"
+    history_channel = f"e2e-history-{RUN}"
+    ana = active_user(admin_token, f"E2E Chat Ana {RUN}", f"e2e.chat0.{RUN}@example.test")
+    ben = active_user(admin_token, f"E2E Chat Ben {RUN}", f"e2e.chat1.{RUN}@example.test")
+    dee = active_user(admin_token, f"E2E Chat Dee {RUN}", f"e2e.chat2.{RUN}@example.test")
+
+    # Two windows, two people: everything in the first half is checked arriving in the other one.
+    sender = new_page(browser)
+    receiver = new_page(browser)
+    receiver.add_init_script(SOCKET_SPY)
+    log_in(sender, "TEAM_LEAD")
+    log_in(receiver, "INTERN")
+
+    def nav_shows_messages():
+        link = sender.get_by_role("link", name=re.compile("^Internal Messages"))
+        expect(link).to_be_visible()
+        expect(link).not_to_contain_text("Soon")
+        expect(sender.get_by_role("link", name=re.compile("^Knowledge & SOPs"))).to_contain_text("Soon")
+        link.click()
+        expect(sender.get_by_role("heading", name="Pick a conversation")).to_be_visible()
+        channels = sender.get_by_role("region", name="Channels")
+        expect(channels.get_by_role("link", name=re.compile("^general"))).to_be_visible()
+        expect(channels.get_by_role("link", name=re.compile("^announcements"))).to_be_visible()
+
+    step("messages: nav item ships without Soon, and lists default channels", nav_shows_messages)
+
+    open_conversation_ids = {}
+
+    def live_new_message():
+        open_conversation(sender, "general")
+        receiver.goto(f"{APP}/messages/{general_id}")
+        text = f"{PREFIX} hello from the lead"
+        expect(message_box(receiver, "#general")).to_be_visible()
+        send_message(sender, "#general", text)
+        expect(message_list(receiver).get_by_text(text)).to_have_count(1)
+        expect(message_list(sender).get_by_text(text)).to_have_count(1)
+        expect(message_box(sender, "#general")).to_have_value("")
+
+    step("messages: a message arrives live in the other window, once in each", live_new_message)
+
+    def shift_enter():
+        box = message_box(sender, "#general")
+        box.fill("first line")
+        box.press("Shift+Enter")
+        box.type("second line")
+        expect(box).to_have_value("first line\nsecond line")
+        box.press("Enter")
+        expect(message_box(sender, "#general")).to_have_value("")
+        expect(message_list(receiver).get_by_text("second line")).to_have_count(1)
+
+    step("messages: Shift+Enter is a new line, Enter sends", shift_enter)
+
+    def live_edit():
+        text = f"{PREFIX} before edit"
+        send_message(sender, "#general", text)
+        row = message_list(sender).get_by_role("listitem").filter(has_text=text)
+        row.hover()
+        row.get_by_role("button", name="Edit message").click()
+        box = sender.get_by_role("textbox", name="Edit message")
+        box.fill(f"{PREFIX} after edit")
+        box.press("Enter")
+        edited = message_list(receiver).get_by_role("listitem").filter(has_text=f"{PREFIX} after edit")
+        expect(edited).to_contain_text("(edited)")
+        expect(message_list(receiver).get_by_text(text)).to_have_count(0)
+
+    step("messages: an edit shows live, labelled edited", live_edit)
+
+    def live_delete():
+        row = message_list(sender).get_by_role("listitem").filter(has_text=f"{PREFIX} after edit")
+        row.hover()
+        row.get_by_role("button", name="Delete message").click()
+        sender.get_by_role("dialog").get_by_role("button", name="Delete").click()
+        expect(message_list(receiver).get_by_text("Message deleted")).to_have_count(1)
+        expect(message_list(receiver).get_by_text(f"{PREFIX} after edit")).to_have_count(0)
+
+    step("messages: a delete shows live as Message deleted", live_delete)
+
+    def someone_elses_message():
+        row = message_list(receiver).get_by_role("listitem").filter(has_text="second line")
+        row.hover()
+        expect(row.get_by_role("button", name="Edit message")).to_have_count(0)
+        expect(row.get_by_role("button", name="Delete message")).to_have_count(0)
+
+    step("messages: an intern gets no edit or delete on other people's messages", someone_elses_message)
+
+    def mention_picker():
+        box = message_box(sender, "#general")
+        box.fill("hi @")
+        box.type("Ina")
+        listbox = sender.get_by_role("listbox", name="People to mention")
+        expect(listbox.get_by_role("option", name=re.compile(intern_user["name"]))).to_be_visible()
+        box.press("Enter")
+        expect(box).to_have_value(f"hi @{intern_user['name']} ")
+        with sender.expect_request(
+            lambda r: r.method == "POST" and r.url.endswith("/messages")
+        ) as sent:
+            box.type("please look")
+            box.press("Enter")
+        assert f"@[{intern_user['name']}]({intern_user['id']})" in sent.value.post_data_json["body"]
+        expect(message_list(receiver).locator(".mention.is-me")).to_have_text(f"@{intern_user['name']}")
+
+    step("messages: @ picks a person and sends the mention written for the API", mention_picker)
+
+    def unread_badges():
+        receiver.goto(f"{APP}/tasks")
+        nav = receiver.get_by_role("link", name=re.compile("^Internal Messages"))
+        expect(nav).to_be_visible()
+        before = call("GET", "/tasks/summary", intern_token)["summary"]["unreadMessages"]
+        send_message(sender, "#general", f"{PREFIX} plain unread")
+        send_message(
+            sender,
+            "#general",
+            f"@[{intern_user['name']}]({intern_user['id']}) unread mention",
+        )
+        expect(nav).to_contain_text(f"{before + 2} unread")
+        nav.click()
+        row = receiver.get_by_role("link", name=re.compile("^general"))
+        expect(row).to_contain_text(f"{before + 2} unread")
+        expect(row).to_contain_text("1 mentions")
+        expect(row.locator(".font-bold")).to_be_visible()
+        row.click()
+        expect(nav).not_to_contain_text("unread")
+        expect(row.locator(".count-badge")).to_have_count(0)
+        assert call("GET", "/tasks/summary", intern_token)["summary"]["unreadMessages"] == 0
+
+    step("messages: unread and mention counts arrive live and clear on reading", unread_badges)
+
+    def dashboard_count():
+        receiver.goto(f"{APP}/")
+        post_message(lead_token, general_id, f"{PREFIX} for the dashboard")
+        expect(receiver.get_by_role("link", name="1 unread message")).to_be_visible()
+        receiver.get_by_role("link", name="1 unread message").click()
+        expect(receiver.get_by_role("heading", name="Messages", exact=True)).to_be_visible()
+
+    step("messages: the dashboard shows unread and links to messages", dashboard_count)
+
+    def task_card():
+        task = call(
+            "POST",
+            "/tasks",
+            lead_token,
+            {"title": f"{PREFIX} linked task", "priority": "MEDIUM", "assigneeIds": [intern_user["id"]]},
+        )["task"]
+        post_message(lead_token, general_id, f"see {APP}/tasks/{task['id']} thanks")
+        receiver.goto(f"{APP}/messages/{general_id}")
+        card = message_list(receiver).get_by_role("link", name=re.compile("linked task")).last
+        expect(card).to_contain_text("To do")
+        call("PATCH", f"/tasks/{task['id']}/status", lead_token, {"status": "BLOCKED"})
+        receiver.evaluate("window.dispatchEvent(new Event('focus'))")
+        expect(card).to_contain_text("Blocked")
+        expect(message_list(receiver)).not_to_contain_text(f"/tasks/{task['id']}")
+
+    step("messages: a task link is a card whose status stays current", task_card)
+
+    def error_states():
+        def refuse(route):
+            return route.fulfill(status=500, json={"error": {"code": "E2E", "message": "Server trouble."}})
+
+        receiver.route("**/api/conversations", refuse)
+        receiver.goto(f"{APP}/messages")
+        expect(receiver.get_by_role("heading", name="Couldn't load your messages")).to_be_visible()
+        # The socket's ready event refetches too, and would clear the error by itself if it came
+        # after the route is lifted, so it has to pass first.
+        receiver.wait_for_timeout(1_500)
+        receiver.unroute("**/api/conversations")
+        receiver.get_by_role("button", name="Try again").click()
+        expect(receiver.get_by_role("region", name="Channels")).to_be_visible()
+
+        receiver.route("**/api/conversations/*/messages", refuse)
+        open_conversation(receiver, "general")
+        expect(receiver.get_by_role("heading", name="Couldn't load messages")).to_be_visible()
+        expect(receiver.get_by_role("region", name="Channels")).to_be_visible()
+        receiver.wait_for_timeout(1_500)
+        receiver.unroute("**/api/conversations/*/messages")
+        receiver.get_by_role("button", name="Try again").click()
+        expect(message_list(receiver)).to_be_visible()
+
+    step("messages: a failed load stays in its own pane, with Try again", error_states)
+
+    def failed_send():
+        sent = []
+
+        def fail_first(route):
+            if route.request.method != "POST":
+                return route.fallback()
+            sent.append(route.request.post_data_json["clientId"])
+            return route.abort() if len(sent) == 1 else route.fallback()
+
+        sender.route("**/api/conversations/*/messages", fail_first)
+        text = f"{PREFIX} survives a failure"
+        send_message(sender, "#general", text)
+        row = message_list(sender).get_by_role("listitem").filter(has_text=text)
+        expect(row).to_contain_text("Message didn't send")
+        open_nav_link(sender, "My Tasks")
+        open_nav_link(sender, "Internal Messages")
+        open_conversation(sender, "general")
+        expect(row).to_contain_text("Message didn't send")
+        row.get_by_role("button", name="Resend").click()
+        expect(message_list(receiver).get_by_text(text)).to_have_count(1)
+        expect(message_list(sender).get_by_text(text)).to_have_count(1)
+        expect(row).not_to_contain_text("Message didn't send")
+        sender.unroute("**/api/conversations/*/messages")
+        assert len(sent) == 2 and sent[0] == sent[1], f"expected one clientId reused, got {sent}"
+
+    step("messages: a failed send keeps the text and Resend reuses its clientId", failed_send)
+
+    def announcements():
+        channel = conversation_named(intern_token, "announcements")["id"]
+        receiver.goto(f"{APP}/messages/{channel}")
+        expect(receiver.get_by_text("Only Super Admin, Admin and Operations can post")).to_be_visible()
+        expect(receiver.get_by_role("combobox")).to_have_count(0)
+        admin = new_page(browser)
+        log_in(admin, "SUPER_ADMIN")
+        admin.goto(f"{APP}/messages/{channel}")
+        send_message(admin, "#announcements", f"{PREFIX} office closes at 4")
+        expect(message_list(receiver).get_by_text("office closes at 4")).to_be_visible()
+        admin.context.close()
+
+    step("messages: #announcements hides the composer from people who can't post", announcements)
+
+    def required_channels():
+        receiver.goto(f"{APP}/messages/{general_id}")
+        receiver.get_by_role("button", name="Conversation details").click()
+        panel = receiver.get_by_role("dialog")
+        expect(panel.get_by_role("switch", name="Mute this conversation")).to_be_visible()
+        expect(panel.get_by_role("button", name="Leave channel")).to_have_count(0)
+        expect(panel.get_by_role("button", name="Archive channel")).to_have_count(0)
+        expect(panel.get_by_role("button", name="Edit channel")).to_have_count(0)
+        panel.get_by_role("button", name="Close").click()
+
+    step("messages: #general offers no leave, archive or edit", required_channels)
+
+    def create_channel_permissions():
+        receiver.get_by_role("button", name="New conversation").click()
+        expect(receiver.get_by_role("button", name="New channel")).to_have_count(0)
+        receiver.keyboard.press("Escape")
+
+    step("messages: an intern can't create a channel", create_channel_permissions)
+
+    def create_public_channel():
+        sender.get_by_role("button", name="New conversation").click()
+        sender.get_by_role("button", name="New channel").click()
+        dialog = sender.get_by_role("dialog", name="New channel")
+        name = dialog.get_by_label("Name")
+        name.fill("Bad Name!")
+        expect(name).to_have_value("bad-name")
+        name.fill("general")
+        dialog.get_by_role("button", name="Create channel").click()
+        expect(dialog.get_by_text(re.compile("name", re.I)).first).to_be_visible()
+        name.fill(public_channel)
+        dialog.get_by_label(re.compile("^Description")).fill("Open to everyone.")
+        dialog.get_by_role("button", name="Create channel").click()
+        expect(sender.get_by_role("heading", name=public_channel, exact=True)).to_be_visible()
+        expect(sender).to_have_url(re.compile(r"/messages/[0-9a-f-]{36}$"))
+
+    step("messages: a Team Lead creates a channel, and a taken name stays on the form", create_public_channel)
+
+    def empty_channel():
+        expect(sender.get_by_role("heading", name=f"Say hello to #{public_channel}")).to_be_visible()
+
+    step("messages: a new channel invites the first message", empty_channel)
+
+    def browse_and_join():
+        channel = conversation_named(lead_token, public_channel)["id"]
+        post_message(lead_token, channel, f"{PREFIX} welcome")
+        receiver.get_by_role("button", name="New conversation").click()
+        receiver.get_by_role("button", name="Browse channels").click()
+        receiver.get_by_role("button", name=f"Open {public_channel}").click()
+        expect(message_list(receiver).get_by_text(f"{PREFIX} welcome")).to_be_visible()
+        expect(receiver.get_by_role("combobox")).to_have_count(0)
+        receiver.get_by_role("button", name="Join channel").click()
+        expect(message_box(receiver, f"#{public_channel}")).to_be_visible()
+        expect(receiver.get_by_role("region", name="Channels")).to_contain_text(public_channel)
+        send_message(receiver, f"#{public_channel}", f"{PREFIX} glad to join")
+        expect(message_list(sender).get_by_text(f"{PREFIX} glad to join")).to_be_visible()
+
+    step("messages: browse, read before joining, then join and post", browse_and_join)
+
+    def leave_channel():
+        receiver.get_by_role("button", name="Conversation details").click()
+        receiver.get_by_role("button", name="Leave channel").click()
+        receiver.get_by_role("alertdialog").or_(receiver.get_by_role("dialog", name=re.compile("^Leave"))).get_by_role(
+            "button", name="Leave", exact=True
+        ).click()
+        expect(receiver).to_have_url(f"{APP}/messages")
+        expect(receiver.get_by_role("region", name="Channels")).not_to_contain_text(public_channel)
+
+    step("messages: leaving a channel takes it off the list", leave_channel)
+
+    def edit_and_archive():
+        renamed = f"{public_channel}-new"
+        call("POST", f"/channels/{conversation_named(lead_token, public_channel)['id']}/join", intern_token)
+        channel = conversation_named(lead_token, public_channel)["id"]
+        sender.goto(f"{APP}/messages/{channel}")
+        receiver.goto(f"{APP}/messages/{channel}")
+        sender.get_by_role("button", name="Conversation details").click()
+        sender.get_by_role("button", name="Edit channel").click()
+        dialog = sender.get_by_role("dialog", name="Edit channel")
+        dialog.get_by_label("Name").fill(renamed)
+        dialog.get_by_role("button", name="Save changes").click()
+        expect(sender.get_by_role("heading", name=renamed, exact=True)).to_be_visible()
+        expect(receiver.get_by_role("heading", name=renamed, exact=True)).to_be_visible()
+
+        sender.get_by_role("button", name="Conversation details").click()
+        sender.get_by_role("button", name="Archive channel").click()
+        sender.get_by_role("button", name="Archive", exact=True).click()
+        expect(sender).to_have_url(f"{APP}/messages")
+        expect(receiver).to_have_url(f"{APP}/messages")
+        expect(receiver.get_by_text(f"#{renamed} was archived.")).to_be_visible()
+        expect(receiver.get_by_role("region", name="Channels")).not_to_contain_text(renamed)
+
+    step("messages: a rename shows live, and archiving closes the channel for its members", edit_and_archive)
+
+    def private_channel_access():
+        channel = call(
+            "POST",
+            "/channels",
+            lead_token,
+            {"name": private_channel, "visibility": "PRIVATE", "description": "Just us."},
+        )["conversation"]
+        open_conversation_ids["private"] = channel["id"]
+        receiver.goto(f"{APP}/messages/{channel['id']}")
+        expect(receiver.get_by_role("heading", name="This channel is private")).to_be_visible()
+        expect(receiver.get_by_role("link", name="Back to messages")).to_be_visible()
+
+    step("messages: a private channel shows no access from a link", private_channel_access)
+
+    def add_to_private():
+        sender.goto(f"{APP}/messages/{open_conversation_ids['private']}")
+        sender.get_by_role("button", name="Conversation details").click()
+        sender.get_by_role("button", name="Add people").click()
+        dialog = sender.get_by_role("dialog", name=re.compile("^Add people"))
+        pick_assignee(dialog, intern_user["name"], "People")
+        dialog.get_by_role("button", name="Add people").click()
+        expect(sender.get_by_text("Added 1 person.")).to_be_visible()
+        receiver.goto(f"{APP}/messages")
+        expect(receiver.get_by_role("region", name="Channels")).to_contain_text(private_channel)
+
+    step("messages: a member adds someone to a private channel", add_to_private)
+
+    def start_dm():
+        receiver.goto(f"{APP}/messages")
+        receiver.get_by_role("button", name="New conversation").click()
+        receiver.get_by_role("button", name="New direct message").click()
+        picker = receiver.get_by_role("dialog", name="New direct message")
+        picker.get_by_role("combobox").fill(ana["name"].split()[0])
+        picker.get_by_role("option", name=re.compile(ana["name"])).click()
+        expect(message_box(receiver, ana["name"])).to_be_visible()
+        expect(receiver.get_by_role("heading", name="Say hello to " + ana["name"])).to_be_visible()
+        send_message(receiver, ana["name"], f"{PREFIX} hi Ana")
+        expect(message_list(receiver).get_by_text(f"{PREFIX} hi Ana")).to_be_visible()
+
+    step("messages: start a DM from the conversation list", start_dm)
+
+    def dm_from_directory():
+        dm_url = conversation_named(intern_token, ana["name"])["id"]
+        receiver.goto(f"{APP}/directory")
+        card = receiver.get_by_role("listitem").filter(has_text=intern_user["name"])
+        expect(card.get_by_role("button", name=re.compile("^Message"))).to_have_count(0)
+        receiver.get_by_role("button", name=f"Message {ana['name']}").click()
+        expect(receiver).to_have_url(f"{APP}/messages/{dm_url}")
+        expect(message_list(receiver).get_by_text(f"{PREFIX} hi Ana")).to_be_visible()
+
+    step("messages: Message in the directory opens the same DM, never for yourself", dm_from_directory)
+
+    def load_older():
+        admin_channel = call(
+            "POST", "/channels", admin_token, {"name": history_channel, "visibility": "PUBLIC"}
+        )["conversation"]["id"]
+        open_conversation_ids["history"] = admin_channel
+        tokens = []
+        for person in (ana, ben):
+            token = call(
+                "POST", "/auth/login", body={"email": person["email"], "password": person["password"]}
+            )["token"]
+            call("POST", f"/channels/{admin_channel}/join", token)
+            tokens.append(token)
+        open_conversation_ids["ana_token"] = tokens[0]
+        for number in range(60):
+            post_message(tokens[number % 2], admin_channel, f"History line {number + 1:02d}.")
+
+        receiver.goto(f"{APP}/messages/{admin_channel}")
+        rows = message_list(receiver).get_by_text(re.compile("^History line"))
+        expect(rows).to_have_count(50)
+        expect(rows.last).to_be_in_viewport()
+        receiver.locator(".overflow-y-auto", has=message_list(receiver)).evaluate("el => el.scrollTo(0, 0)")
+        expect(rows).to_have_count(60)
+        expect(rows.first).to_have_text("History line 01.")
+        expect(receiver.get_by_text("History line 11.")).to_be_in_viewport()
+
+    step("messages: scrolling up loads older messages and keeps your place", load_older)
+
+    def rate_limited():
+        page = new_page(browser)
+        log_in_as(page, ana["email"], ana["password"])
+        page.goto(f"{APP}/messages/{open_conversation_ids['history']}")
+        text = f"{PREFIX} over the limit"
+        send_message(page, f"#{history_channel}", text)
+        row = message_list(page).get_by_role("listitem").filter(has_text=text)
+        expect(row).to_contain_text("Message didn't send")
+        expect(row.get_by_role("button", name="Resend")).to_be_visible()
+        page.context.close()
+
+    step("messages: the rate limit keeps the typed text with Resend", rate_limited)
+
+    def mute():
+        receiver.goto(f"{APP}/messages/{general_id}")
+        receiver.get_by_role("button", name="Conversation details").click()
+        receiver.get_by_role("switch", name="Mute this conversation").click()
+        expect(receiver.get_by_role("switch", name="Mute this conversation")).to_be_checked()
+        receiver.get_by_role("button", name="Close").click()
+        receiver.goto(f"{APP}/tasks")
+        post_message(lead_token, general_id, f"{PREFIX} while muted")
+        nav = receiver.get_by_role("link", name=re.compile("^Internal Messages"))
+        receiver.wait_for_timeout(1_000)
+        expect(nav).not_to_contain_text("unread")
+        post_message(
+            lead_token, general_id, f"@[{intern_user['name']}]({intern_user['id']}) still counts"
+        )
+        expect(nav).to_contain_text("1 unread")
+        call("PATCH", f"/conversations/{general_id}/mute", intern_token, {"isMuted": False})
+
+    step("messages: muting leaves out messages, but mentions still count", mute)
+
+    def reconnect():
+        receiver.goto(f"{APP}/messages/{general_id}")
+        expect(message_box(receiver, "#general")).to_be_visible()
+        receiver.route("**/socket.io/**", lambda route: route.abort())
+        receiver.evaluate("window.__blockSockets = true; window.__sockets.forEach((s) => s.close())")
+        expect(receiver.get_by_text("Reconnecting…")).to_be_visible(timeout=15_000)
+
+        while_down = f"{PREFIX} sent while the socket is down"
+        post_message(lead_token, general_id, while_down)
+        expect(message_list(receiver).get_by_text(while_down)).to_have_count(1, timeout=20_000)
+
+        gap = f"{PREFIX} sent just before it returns"
+        post_message(lead_token, general_id, gap)
+        receiver.unroute("**/socket.io/**")
+        receiver.evaluate("window.__blockSockets = false")
+        expect(receiver.get_by_text("Reconnecting…")).to_be_hidden(timeout=20_000)
+        expect(message_list(receiver).get_by_text(gap)).to_have_count(1)
+        expect(message_list(receiver).get_by_text(while_down)).to_have_count(1)
+
+        # The socket client reports the block on its way to the fallback. It's the test's own error.
+        console_problems[:] = [p for p in console_problems if "Blocked by the test" not in p]
+
+        live = f"{PREFIX} live again"
+        post_message(lead_token, general_id, live)
+        expect(message_list(receiver).get_by_text(live)).to_have_count(1)
+
+    step("messages: a dropped socket shows Reconnecting, polls, then catches up with no duplicates", reconnect)
+
+    def deactivated_people():
+        page = new_page(browser)
+        log_in_as(page, ben["email"], ben["password"])
+        page.goto(f"{APP}/directory")
+        page.get_by_role("button", name=f"Message {dee['name']}").click()
+        expect(message_box(page, dee["name"])).to_be_visible()
+        page.context.close()
+        dee_token = call(
+            "POST", "/auth/login", body={"email": dee["email"], "password": dee["password"]}
+        )["token"]
+        conversation = conversation_named(dee_token, ben["name"])["id"]
+        post_message(dee_token, conversation, f"{PREFIX} last words")
+
+        signed_in = new_page(browser)
+        log_in_as(signed_in, dee["email"], dee["password"])
+        signed_in.goto(f"{APP}/messages/{conversation}")
+        expect(message_box(signed_in, ben["name"])).to_be_visible()
+        call("POST", f"/users/{dee['id']}/deactivate", admin_token)
+        expect(signed_in).to_have_url(re.compile("/login"))
+        signed_in.context.close()
+
+        page = new_page(browser)
+        log_in_as(page, ben["email"], ben["password"])
+        page.goto(f"{APP}/messages/{conversation}")
+        name = message_list(page).get_by_text(dee["name"]).first
+        expect(name).to_have_class(re.compile("text-text-3"))
+        expect(page.get_by_text("is no longer active")).to_be_visible()
+        expect(page.get_by_role("combobox")).to_have_count(0)
+        page.context.close()
+
+    step("messages: a deactivated person keeps old messages under a muted name", deactivated_people)
+
+    def phone():
+        page = new_page(browser, MOBILE)
+        log_in(page, "INTERN")
+        page.goto(f"{APP}/messages")
+        expect(page.locator(".bottom-bar")).to_be_visible()
+        expect_no_sideways_scroll(page, "messages list")
+        open_conversation(page, "general")
+        box = message_box(page, "#general")
+        expect(box).to_be_visible()
+        expect(box).to_be_in_viewport()
+        expect(page.locator(".bottom-bar")).to_have_count(0)
+        expect_no_sideways_scroll(page, "conversation")
+        text = f"{PREFIX} from a phone"
+        send_message(page, "#general", text)
+        expect(message_list(page).get_by_text(text)).to_have_count(1)
+        page.get_by_role("link", name="Back to messages").click()
+        expect(page.get_by_role("heading", name="Messages", exact=True)).to_be_visible()
+        expect(page.get_by_role("combobox")).to_have_count(0)
+        page.context.close()
+
+        touch = browser.new_context(viewport=MOBILE, has_touch=True, is_mobile=True).new_page()
+        log_in(touch, "INTERN")
+        touch.goto(f"{APP}/messages/{general_id}")
+        row = message_list(touch).get_by_role("listitem").filter(has_text=text)
+        expect(row.get_by_role("button", name="Delete message")).to_be_hidden()
+        row.get_by_text(text).tap()
+        expect(row.get_by_role("button", name="Delete message")).to_be_visible()
+
+        touch.route(
+            "**/api/conversations/*/messages",
+            lambda route: route.abort() if route.request.method == "POST" else route.fallback(),
+        )
+        send_message(touch, "#general", f"{PREFIX} failed on a phone")
+        expect(touch.get_by_role("button", name="Resend")).to_be_in_viewport()
+        touch.context.close()
+
+    step("messages: on a phone the list and the conversation are separate screens", phone)
+
+    def widths():
+        for viewport in ({"width": 1280, "height": 800}, WIDE):
+            page = new_page(browser, viewport)
+            log_in(page, "INTERN")
+            page.goto(f"{APP}/messages/{general_id}")
+            expect(page.get_by_role("region", name="Channels")).to_be_visible()
+            expect(message_box(page, "#general")).to_be_in_viewport()
+            expect_no_sideways_scroll(page, f"conversation at {viewport['width']}")
+            page.context.close()
+
+    step("messages: both panes fit at 1280 and 1440", widths)
+
+    def logout_closes_socket():
+        receiver.goto(f"{APP}/messages/{general_id}")
+        expect(message_box(receiver, "#general")).to_be_visible()
+        receiver.get_by_role("button", name=re.compile("^Account menu")).click()
+        receiver.get_by_role("button", name="Log out").click()
+        expect(receiver).to_have_url(re.compile("/login"))
+        receiver.wait_for_function(
+            "window.__sockets.some((s) => s.url.includes('socket.io')) && "
+            "window.__sockets.filter((s) => s.url.includes('socket.io'))"
+            ".every((s) => s.readyState !== WebSocket.OPEN)"
+        )
+
+    step("messages: logging out closes the socket", logout_closes_socket)
+
+    sender.context.close()
+    receiver.context.close()
+    for person in (ana, ben):
+        call("POST", f"/users/{person['id']}/deactivate", admin_token)
+
+
 def run_departments(browser, admin_token):
     lead_login = dict(zip(("email", "password"), credentials("TEAM_LEAD")))
     intern_login = dict(zip(("email", "password"), credentials("INTERN")))
@@ -1894,7 +2503,6 @@ def run_meetings(browser, admin_token):
 
     def create():
         expect(lead.get_by_role("link", name="Meetings & Schedule")).not_to_contain_text("Soon")
-        expect(lead.get_by_role("link", name="Internal Messages")).to_contain_text("Soon")
         expect(lead.get_by_role("link", name="Knowledge & SOPs")).to_contain_text("Soon")
         open_nav_link(lead, "Meetings")
         lead.get_by_role("button", name="New meeting").click()

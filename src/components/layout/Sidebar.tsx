@@ -1,7 +1,9 @@
 import React from 'react';
 import logo from '../../assets/brivent/logos/brivent-logo-cobalt-lavender.svg';
 import icon from '../../assets/brivent/logos/brivent-icon-lavender.svg';
+import { useRealtime } from '../../context/RealtimeContext';
 import { Link, usePathname } from '../../lib/router';
+import { CountBadge } from '../ui/CountBadge';
 import { Icon } from '../ui/Icon';
 import { isNavActive, useNavSections } from './navItems';
 
@@ -14,6 +16,7 @@ interface SidebarProps {
 export const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle }) => {
   const sections = useNavSections();
   const pathname = usePathname();
+  const { unreadBadge } = useRealtime();
 
   return (
     <aside className={`nav app-sidebar ${isCollapsed ? 'is-collapsed' : ''}`}>
@@ -39,6 +42,9 @@ export const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle }) => {
                     >
                       <Icon name={itemIcon} filled={isActive} />
                       <span className="nav-text grow truncate">{label}</span>
+                      {to === '/messages' && unreadBadge > 0 && (
+                        <CountBadge count={unreadBadge} label="unread" />
+                      )}
                       {comingSoon && !isCollapsed && (
                         <span className="text-caption text-nav-label">Soon</span>
                       )}

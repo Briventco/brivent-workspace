@@ -18,6 +18,7 @@ import { DashboardGreeting } from './DashboardGreeting';
 import { MeetingsCard } from './MeetingsCard';
 import { BlockersCard, NotCheckedInCard } from './TeamCheckinCards';
 import { daysLate, TaskRow } from './TaskRow';
+import { UnreadMessagesLink } from './UnreadMessagesLink';
 
 const TASKS = '/tasks?view=all';
 const KPI_COLUMNS: Record<number, string> = { 4: 'xl:grid-cols-4', 5: 'xl:grid-cols-5' };
@@ -333,6 +334,8 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ summary, onC
       </DashboardGreeting>
 
       <MissingDepartmentsPrompt />
+
+      <UnreadMessagesLink summary={summary} />
 
       {stats}
 

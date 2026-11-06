@@ -1,6 +1,8 @@
 import React from 'react';
 import { useSession } from '../../context/AuthContext';
+import { useRealtime } from '../../context/RealtimeContext';
 import { Link, usePathname } from '../../lib/router';
+import { CountBadge } from '../ui/CountBadge';
 import { Icon, IconName } from '../ui/Icon';
 import { BOTTOM_BAR_PATHS, isNavActive } from './navItems';
 
@@ -8,6 +10,7 @@ import { BOTTOM_BAR_PATHS, isNavActive } from './navItems';
 export const BottomBar: React.FC = () => {
   const { can } = useSession();
   const pathname = usePathname();
+  const { unreadBadge } = useRealtime();
 
   const tabs: { to: string; label: string; icon: IconName }[] = [
     { to: '/', label: 'Home', icon: 'space_dashboard' },
@@ -30,7 +33,12 @@ export const BottomBar: React.FC = () => {
             aria-current={isActive ? 'page' : undefined}
             className={`bottom-tab ${isActive ? 'on' : ''}`}
           >
-            <Icon name={icon} filled={isActive} />
+            <span className="relative inline-flex">
+              <Icon name={icon} filled={isActive} />
+              {to === '/messages' && unreadBadge > 0 && (
+                <CountBadge count={unreadBadge} label="unread" />
+              )}
+            </span>
             {label}
           </Link>
         );
