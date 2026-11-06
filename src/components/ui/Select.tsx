@@ -13,15 +13,26 @@ interface SelectProps extends React.SelectHTMLAttributes<HTMLSelectElement> {
   helperText?: string;
   /** Keeps the label for screen readers where the context already shows what it is. */
   hideLabel?: boolean;
+  optional?: boolean;
 }
 
 export const Select = React.forwardRef<HTMLSelectElement, SelectProps>(
-  ({ label, error, options, helperText, hideLabel = false, className = '', id, ...props }, ref) => {
+  (
+    { label, error, options, helperText, hideLabel = false, optional, className = '', id, ...props },
+    ref,
+  ) => {
     const generatedId = useId();
     const selectId = id ?? generatedId;
 
     return (
-      <Field id={selectId} label={label} hideLabel={hideLabel} error={error} hint={helperText}>
+      <Field
+        id={selectId}
+        label={label}
+        hideLabel={hideLabel}
+        optional={optional}
+        error={error}
+        hint={helperText}
+      >
         <select
           id={selectId}
           ref={ref}

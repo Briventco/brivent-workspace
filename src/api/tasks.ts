@@ -6,6 +6,7 @@ import {
   TaskStatus,
   TaskSummary,
 } from './types';
+import { addDays, watDate, watDayStart, weekStart } from '../lib/wat';
 
 export const TASKS_PAGE_SIZE = 50;
 export const COMMENTS_PAGE_SIZE = 100;
@@ -14,6 +15,8 @@ export type TaskView = 'mine' | 'assigned' | 'unassigned' | 'all';
 
 export interface TaskFilters {
   status?: TaskStatus;
+  assigneeId?: string;
+  projectId?: string;
   priority?: TaskPriority;
   overdue?: boolean;
   dueAfter?: string;
@@ -34,6 +37,7 @@ export interface NewTask {
   priority: TaskPriority;
   deadline?: string;
   assigneeId?: string;
+  projectId?: string;
 }
 
 export interface TaskChanges {
@@ -42,6 +46,7 @@ export interface TaskChanges {
   priority?: TaskPriority;
   deadline?: string | null;
   assigneeId?: string | null;
+  projectId?: string | null;
 }
 
 const VIEW_PATHS: Record<TaskView, string> = {
@@ -66,6 +71,69 @@ export async function listTasks(
 
   const path = VIEW_PATHS[view];
   return request(`${path}${path.includes('?') ? '&' : '?'}${params}`, { signal });
+}
+
+const MAX_LIMIT = 100;
+
+/** Every page of a list, for totals the API doesn't give directly. */
+export async function listEveryTask(
+  view: TaskView,
+  filters: TaskFilters,
+  signal?: AbortSignal,
+): Promise<Task[]> {
+  const tasks: Task[] = [];
+  for (let page = 1; ; page += 1) {
+    const data = await listTasks(view, { ...filters, page, limit: MAX_LIMIT }, signal);
+    tasks.push(...data.tasks);
+    if (data.tasks.length === 0 || tasks.length >= data.total) return tasks;
+  }
+}
+
+/** The API can't exclude a status, so "open" is everything in the three unfinished ones. */
+export async function listOpenTasks(
+  view: TaskView,
+  filters: TaskFilters = {},
+  signal?: AbortSignal,
+): Promise<Task[]> {
+  const lists = await Promise.all(
+    (['TODO', 'IN_PROGRESS', 'BLOCKED'] as const).map((status) =>
+      listEveryTask(view, { ...filters, status }, signal),
+    ),
+  );
+  return lists.flat();
+}
+
+export type TaskPreset = 'open' | 'dueToday' | 'doneThisWeek';
+
+export const TASK_PRESET_LABELS: Record<TaskPreset, string> = {
+  open: 'Open',
+  dueToday: 'Due today',
+  doneThisWeek: 'Done this week',
+};
+
+const byDeadline = (a: Task, b: Task) =>
+  (a.deadline ?? '9999').localeCompare(b.deadline ?? '9999');
+
+/** Lists the dashboard's numbers link to, which no single API query can return. */
+export async function listPresetTasks(
+  view: TaskView,
+  preset: TaskPreset,
+  filters: TaskFilters,
+  signal?: AbortSignal,
+): Promise<Task[]> {
+  if (preset === 'doneThisWeek') {
+    const since = weekStart().toISOString();
+    const done = await listEveryTask(view, { ...filters, status: 'DONE' }, signal);
+    return done.filter((task) => task.completedAt && task.completedAt >= since);
+  }
+
+  const today = watDayStart(watDate());
+  const window =
+    preset === 'dueToday'
+      ? { dueAfter: today.toISOString(), dueBefore: addDays(today, 1).toISOString() }
+      : {};
+  const tasks = await listOpenTasks(view, { ...filters, ...window }, signal);
+  return tasks.sort(byDeadline);
 }
 
 export async function getTaskSummary(signal?: AbortSignal): Promise<TaskSummary> {

@@ -1,14 +1,15 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { usePathname } from '../../lib/router';
+import { BottomBar } from './BottomBar';
 import { Sidebar } from './Sidebar';
 import { TopNavbar } from './TopNavbar';
+import { useSidebarCollapsed } from './useSidebarCollapsed';
 
 export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const pathname = usePathname();
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const { isCollapsed, toggle } = useSidebarCollapsed();
   const mainRef = useRef<HTMLElement>(null);
   const isFirstRender = useRef(true);
-  const closeMobileMenu = useCallback(() => setIsMobileMenuOpen(false), []);
 
   // Moves focus with the page, so keyboard and screen reader users land on the new content.
   useEffect(() => {
@@ -29,19 +30,21 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
         Skip to content
       </a>
 
-      <Sidebar isOpenMobile={isMobileMenuOpen} onCloseMobile={closeMobileMenu} />
+      <Sidebar isCollapsed={isCollapsed} onToggle={toggle} />
 
-      <div className="flex flex-col min-h-screen lg:pl-[248px]">
-        <TopNavbar onOpenMobileMenu={() => setIsMobileMenuOpen(true)} />
+      <div className={`flex flex-col min-h-screen ${isCollapsed ? 'md:pl-16' : 'md:pl-[248px]'}`}>
+        <TopNavbar />
         <main
           id="main-content"
           ref={mainRef}
           tabIndex={-1}
-          className="grow w-full max-w-[1240px] px-4 pt-5 pb-12 md:px-8 md:pt-7"
+          className="grow w-full max-w-[1240px] px-4 pt-5 pb-24 md:px-8 md:pt-7 md:pb-12"
         >
           {children}
         </main>
       </div>
+
+      <BottomBar />
     </div>
   );
 };

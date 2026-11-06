@@ -76,6 +76,8 @@ export interface Task {
   assignee: PersonRef | null;
   assignedBy: PersonRef | null;
   assignedAt: string | null;
+  projectId: string | null;
+  project: PersonRef | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -94,9 +96,76 @@ export interface TaskSummary {
   overdue: number;
   doneThisWeek: number;
   weekStart: string;
+  /** Each of these arrives with its backend feature. The dashboard only shows what's sent. */
+  checkedInToday?: boolean;
+  teamCheckins?: { submitted: number; notSubmitted: number; openBlockers: number };
+  upcomingMeetings?: number;
+}
+
+export interface CheckinPerson extends PersonRef {
+  role: Role;
+}
+
+export interface CheckinReply {
+  id: string;
+  author: PersonRef;
+  body: string;
+  createdAt: string;
+}
+
+export interface LinkedTask {
+  id: string;
+  title: string;
+  status: TaskStatus;
+}
+
+export interface Checkin {
+  id: string;
+  user: CheckinPerson;
+  /** The WAT calendar date as YYYY-MM-DD. Never pass it through a browser timezone. */
+  date: string;
+  workCompleted: string;
+  priorities: string;
+  blockers: string | null;
+  blockerHandled: boolean;
+  blockerHandledBy: PersonRef | null;
+  isLate: boolean;
+  submittedAt: string;
+  updatedAt: string;
+  editable: boolean;
+  linkedTasks: LinkedTask[];
+  replies: CheckinReply[];
 }
 
 export interface DirectoryUser extends PersonRef {
   role: Role;
   status: UserStatus;
+}
+
+export const PROJECT_STATUSES = ['ACTIVE', 'ON_HOLD', 'COMPLETED'] as const;
+export type ProjectStatus = (typeof PROJECT_STATUSES)[number];
+
+export const PROJECT_STATUS_LABELS: Record<ProjectStatus, string> = {
+  ACTIVE: 'Active',
+  ON_HOLD: 'On hold',
+  COMPLETED: 'Completed',
+};
+
+export interface ProjectMember extends PersonRef {
+  role: Role;
+}
+
+export interface Project {
+  id: string;
+  name: string;
+  description: string | null;
+  status: ProjectStatus;
+  /** Calendar days as YYYY-MM-DD. Never pass them through a browser timezone. */
+  startDate: string | null;
+  dueDate: string | null;
+  owner: PersonRef;
+  members: ProjectMember[];
+  progress: { total: number; done: number; overdue: number };
+  createdAt: string;
+  updatedAt: string;
 }

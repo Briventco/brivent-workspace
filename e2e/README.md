@@ -49,4 +49,4 @@ npx tsx src/index.ts > /tmp/backend.log 2>&1   # in the backend repo
 E2E_DESTRUCTIVE=1 E2E_BACKEND_LOG=/tmp/backend.log npm run e2e
 ```
 
-Two steps change the API's response in the browser, because neither can happen for real locally. They're marked "simulated" in the output: a failed email, and a set-password response that includes the email.
+Steps marked "simulated" change or block an API response in the browser, because the real thing can't be forced locally: a failed email, a dashboard load that fails, and a backend without the check-in and meeting fields.

@@ -1,140 +1,71 @@
-import React, { useEffect } from 'react';
-import { useSession } from '../../context/AuthContext';
+import React from 'react';
 import logo from '../../assets/brivent/logos/brivent-logo-cobalt-lavender.svg';
-import { Action } from '../../lib/permissions';
-import { Icon, IconName } from '../ui/Icon';
+import icon from '../../assets/brivent/logos/brivent-icon-lavender.svg';
 import { Link, usePathname } from '../../lib/router';
-
-interface NavItem {
-  to: string;
-  label: string;
-  icon: IconName;
-  comingSoon?: boolean;
-  action?: Action;
-}
-
-const NAV_SECTIONS: { title: string; items: NavItem[] }[] = [
-  {
-    title: 'Daily work',
-    items: [
-      { to: '/', label: 'Dashboard', icon: 'space_dashboard' },
-      { to: '/daily', label: 'Daily Check-in', icon: 'edit_note', comingSoon: true },
-      {
-        to: '/tasks',
-        label: 'My Tasks',
-        icon: 'task_alt',
-        action: 'viewOwnTasks',
-      },
-      { to: '/projects', label: 'Projects', icon: 'folder_open', comingSoon: true },
-      { to: '/messages', label: 'Internal Messages', icon: 'forum', comingSoon: true },
-      { to: '/calendar', label: 'Meetings & Schedule', icon: 'calendar_month', comingSoon: true },
-    ],
-  },
-  {
-    title: 'Company',
-    items: [
-      { to: '/docs', label: 'Knowledge & SOPs', icon: 'menu_book', comingSoon: true },
-      {
-        to: '/directory',
-        label: 'Team Directory',
-        icon: 'groups',
-        action: 'viewDirectory',
-      },
-    ],
-  },
-  {
-    title: 'Administration',
-    items: [
-      {
-        to: '/users',
-        label: 'User Management',
-        icon: 'manage_accounts',
-        action: 'viewUsers',
-      },
-      { to: '/settings', label: 'Settings', icon: 'settings' },
-    ],
-  },
-];
+import { Icon } from '../ui/Icon';
+import { isNavActive, useNavSections } from './navItems';
 
 interface SidebarProps {
-  isOpenMobile: boolean;
-  onCloseMobile: () => void;
+  isCollapsed: boolean;
+  onToggle: () => void;
 }
 
-export const Sidebar: React.FC<SidebarProps> = ({ isOpenMobile, onCloseMobile }) => {
-  const { can } = useSession();
+/** From 768px up. Phones get the bottom bar instead. */
+export const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle }) => {
+  const sections = useNavSections();
   const pathname = usePathname();
 
-  useEffect(() => {
-    if (!isOpenMobile) return;
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onCloseMobile();
-    };
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [isOpenMobile, onCloseMobile]);
-
   return (
-    <>
-      {isOpenMobile && (
-        <div
-          className="scrim fixed inset-0 z-40 lg:hidden"
-          onClick={onCloseMobile}
-          aria-hidden="true"
-        />
-      )}
+    <aside className={`nav app-sidebar ${isCollapsed ? 'is-collapsed' : ''}`}>
+      <div className="nav-brand">
+        <img src={isCollapsed ? icon : logo} alt="Brivent" />
+        {!isCollapsed && <span className="ws grow">Workspace</span>}
+      </div>
 
-      {/* `invisible` keeps the closed off-canvas links out of the tab order. */}
-      <aside
-        className={`nav fixed inset-y-0 left-0 z-50 transition-transform duration-200 lg:visible lg:translate-x-0 ${
-          isOpenMobile ? 'translate-x-0' : 'invisible -translate-x-full'
-        }`}
-      >
-        <div className="nav-brand">
-          <img src={logo} alt="Brivent" />
-          <span className="ws grow">Workspace</span>
-          <button
-            type="button"
-            onClick={onCloseMobile}
-            className="lg:hidden text-nav-text hover:text-white rounded"
-            aria-label="Close navigation"
-          >
-            <Icon name="close" />
-          </button>
-        </div>
+      <nav aria-label="Main" className="grow overflow-y-auto">
+        {sections.map((section) => (
+          <div key={section.title}>
+            <h2 className="nav-label">{section.title}</h2>
+            <ul>
+              {section.items.map(({ to, label, icon: itemIcon, comingSoon }) => {
+                const isActive = isNavActive(to, pathname);
+                return (
+                  <li key={to}>
+                    <Link
+                      to={to}
+                      title={isCollapsed ? label : undefined}
+                      aria-current={isActive ? 'page' : undefined}
+                      className={`nav-item ${isActive ? 'on' : ''}`}
+                    >
+                      <Icon name={itemIcon} filled={isActive} />
+                      <span className="nav-text grow truncate">{label}</span>
+                      {comingSoon && !isCollapsed && (
+                        <span className="text-caption text-nav-label">Soon</span>
+                      )}
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        ))}
+      </nav>
 
-        <nav aria-label="Main" className="grow overflow-y-auto">
-          {NAV_SECTIONS.map((section) => {
-            const items = section.items.filter((item) => !item.action || can(item.action));
-            if (items.length === 0) return null;
-
-            return (
-              <div key={section.title}>
-                <h2 className="nav-label">{section.title}</h2>
-                <ul>
-                  {items.map(({ to, label, icon, comingSoon }) => {
-                    const isActive = pathname === to || (to !== '/' && pathname.startsWith(`${to}/`));
-                    return (
-                      <li key={to}>
-                        <Link
-                          to={to}
-                          onClick={onCloseMobile}
-                          aria-current={isActive ? 'page' : undefined}
-                          className={`nav-item ${isActive ? 'on' : ''}`}
-                        >
-                          <Icon name={icon} filled={isActive} />
-                          <span className="grow truncate">{label}</span>
-                          {comingSoon && <span className="text-caption text-nav-label">Soon</span>}
-                        </Link>
-                      </li>
-                    );
-                  })}
-                </ul>
-              </div>
-            );
-          })}
-        </nav>
-      </aside>
-    </>
+      <div className="nav-foot">
+        <button
+          type="button"
+          onClick={onToggle}
+          aria-expanded={!isCollapsed}
+          title={isCollapsed ? 'Expand sidebar' : undefined}
+          className="nav-item w-full bg-transparent border-0 cursor-pointer"
+        >
+          <Icon name={isCollapsed ? 'left_panel_open' : 'left_panel_close'} />
+          <span className="nav-text grow text-left">
+            {isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          </span>
+          {!isCollapsed && <kbd className="nav-key">[</kbd>}
+        </button>
+      </div>
+    </aside>
   );
 };

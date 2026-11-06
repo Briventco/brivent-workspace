@@ -13,6 +13,8 @@ function subscribe(onChange: () => void) {
 
 export const usePathname = () => useSyncExternalStore(subscribe, () => window.location.pathname);
 
+export const useSearch = () => useSyncExternalStore(subscribe, () => window.location.search);
+
 export function navigate(
   to: string,
   { replace = false, state = null }: { replace?: boolean; state?: unknown } = {},

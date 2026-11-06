@@ -1,13 +1,15 @@
 import React from 'react';
 import { Action } from './lib/permissions';
 import { CalendarView } from './views/CalendarView';
-import { DailyRoutineView } from './views/DailyRoutineView';
+import { DailyCheckinView } from './views/DailyCheckinView';
 import { DashboardView } from './views/DashboardView';
 import { DirectoryView } from './views/DirectoryView';
 import { DocumentsView } from './views/DocumentsView';
 import { ForgotPasswordView } from './views/ForgotPasswordView';
 import { MessagesView } from './views/MessagesView';
+import { MoreView } from './views/MoreView';
 import { NotificationsView } from './views/NotificationsView';
+import { ProjectDetailView } from './views/ProjectDetailView';
 import { ProjectsView } from './views/ProjectsView';
 import { ResetPasswordView } from './views/ResetPasswordView';
 import { SetPasswordView } from './views/SetPasswordView';
@@ -30,13 +32,13 @@ const DesignSystemView = import.meta.env.DEV
 
 const ROUTES: Record<string, AppRoute> = {
   '/': { title: 'Dashboard', element: <DashboardView /> },
-  '/daily': { title: 'Daily Check-in', element: <DailyRoutineView /> },
+  '/daily': { title: 'Daily Check-in', element: <DailyCheckinView />, action: 'submitCheckin' },
   '/tasks': {
     title: 'My Tasks',
     element: <TasksView />,
     action: 'viewOwnTasks',
   },
-  '/projects': { title: 'Projects', element: <ProjectsView /> },
+  '/projects': { title: 'Projects', element: <ProjectsView />, action: 'viewProjects' },
   '/messages': { title: 'Internal Messages', element: <MessagesView /> },
   '/calendar': { title: 'Meetings & Schedule', element: <CalendarView /> },
   '/docs': { title: 'Knowledge & SOPs', element: <DocumentsView /> },
@@ -46,6 +48,7 @@ const ROUTES: Record<string, AppRoute> = {
     action: 'viewDirectory',
   },
   '/notifications': { title: 'Notifications', element: <NotificationsView /> },
+  '/more': { title: 'More', element: <MoreView /> },
   '/settings': { title: 'Settings', element: <SettingsView /> },
   '/profile': { title: 'Settings', element: <SettingsView /> },
   '/users': {
@@ -83,6 +86,14 @@ export function resolveRoute(pathname: string): AppRoute | undefined {
       title: 'Task',
       element: <TaskDetailView key={taskId} taskId={taskId} />,
       action: 'viewOwnTasks',
+    };
+  }
+  const projectId = pathname.match(/^\/projects\/([^/]+)$/)?.[1];
+  if (projectId) {
+    return {
+      title: 'Project',
+      element: <ProjectDetailView key={projectId} projectId={projectId} />,
+      action: 'viewProjects',
     };
   }
   return ROUTES[pathname];

@@ -12,6 +12,13 @@ interface AssigneePickerProps {
   error?: string;
   /** Bumped by the parent to re-read the list, such as after ASSIGNEE_DEACTIVATED. */
   refreshKey?: number;
+  label?: string;
+  /** Offers "Unassigned". Turn it off where someone has to be chosen. */
+  allowNone?: boolean;
+  /** Shown when nobody is chosen and "Unassigned" isn't an option. */
+  placeholder?: string;
+  /** People who can't be picked, such as those already on a project. */
+  excludeIds?: string[];
 }
 
 const UNASSIGNED_ID = '__unassigned__';
@@ -21,6 +28,10 @@ export const AssigneePicker: React.FC<AssigneePickerProps> = ({
   onChange,
   error,
   refreshKey = 0,
+  label = 'Assignee',
+  allowNone = true,
+  placeholder = 'Search by name',
+  excludeIds = [],
 }) => {
   const id = useId();
   const listId = `${id}-list`;
@@ -38,7 +49,8 @@ export const AssigneePicker: React.FC<AssigneePickerProps> = ({
     [isOpen, debouncedSearch, refreshKey],
   );
 
-  const options: (DirectoryUser | null)[] = [null, ...(query.data?.users ?? [])];
+  const people = (query.data?.users ?? []).filter((person) => !excludeIds.includes(person.id));
+  const options: (DirectoryUser | null)[] = allowNone ? [null, ...people] : people;
 
   useEffect(() => setActiveIndex(0), [debouncedSearch]);
 
@@ -68,7 +80,7 @@ export const AssigneePicker: React.FC<AssigneePickerProps> = ({
     } else if (e.key === 'Enter' && isOpen) {
       // Inside a form, Enter here picks a person rather than submitting.
       e.preventDefault();
-      choose(options[activeIndex]);
+      if (activeIndex < options.length) choose(options[activeIndex]);
     } else if (e.key === 'Escape' && isOpen) {
       // Closes the list without also closing the dialog around it.
       e.stopPropagation();
@@ -84,7 +96,7 @@ export const AssigneePicker: React.FC<AssigneePickerProps> = ({
     <div ref={containerRef} className="relative w-full">
       <div className="field">
         <label htmlFor={`${id}-input`} className="label">
-          Assignee
+          {label}
         </label>
         <div className="relative">
           <input
@@ -97,8 +109,8 @@ export const AssigneePicker: React.FC<AssigneePickerProps> = ({
             aria-invalid={error ? true : undefined}
             aria-describedby={describedBy}
             autoComplete="off"
-            value={isOpen ? search : (value?.name ?? 'Unassigned')}
-            placeholder="Search by name"
+            value={isOpen ? search : (value?.name ?? (allowNone ? 'Unassigned' : ''))}
+            placeholder={isOpen ? 'Search by name' : placeholder}
             onChange={(e) => {
               setSearch(e.target.value);
               setIsOpen(true);
@@ -120,7 +132,7 @@ export const AssigneePicker: React.FC<AssigneePickerProps> = ({
         <ul
           id={listId}
           role="listbox"
-          aria-label="Assignee"
+          aria-label={label}
           className="popover absolute z-10 mt-1 w-full max-h-52 overflow-y-auto py-1"
         >
           {options.map((person, index) => (

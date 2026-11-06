@@ -28,6 +28,16 @@ export const StatusBadge: React.FC<{ status: TaskStatus }> = ({ status }) => {
   );
 };
 
+/** For dense phone rows, where the word sits in the line beside it. */
+export const StatusIcon: React.FC<{ status: TaskStatus }> = ({ status }) => {
+  const { className, icon, filled } = STATUS[status];
+  return (
+    <span className={`badge !p-1 ${className}`}>
+      <Icon name={icon} size="sm" filled={filled} />
+    </span>
+  );
+};
+
 const PRIORITY: Record<TaskPriority, { className: string; icon: IconName; filled?: boolean }> = {
   LOW: { className: 'pr-low', icon: 'signal_cellular_alt_1_bar' },
   MEDIUM: { className: 'pr-med', icon: 'signal_cellular_alt_2_bar' },

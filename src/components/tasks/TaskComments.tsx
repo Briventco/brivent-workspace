@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import { errorMessage } from '../../api/client';
 import { addComment, COMMENTS_PAGE_SIZE, listComments } from '../../api/tasks';
 import { TaskComment } from '../../api/types';
-import { useSession } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
 import { formatDateTime } from '../../lib/tasks';
 import { useApiQuery } from '../../lib/useApiQuery';
@@ -11,8 +10,11 @@ import { Avatar } from '../ui/Avatar';
 import { Button } from '../ui/Button';
 import { Textarea } from '../ui/Textarea';
 
-export const TaskComments: React.FC<{ taskId: string }> = ({ taskId }) => {
-  const { can } = useSession();
+/** Someone who only sees a task through its project can read the comments but not post. */
+export const TaskComments: React.FC<{ taskId: string; canComment: boolean }> = ({
+  taskId,
+  canComment,
+}) => {
   const toast = useToast();
 
   const [pages, setPages] = useState(1);
@@ -91,7 +93,7 @@ export const TaskComments: React.FC<{ taskId: string }> = ({ taskId }) => {
         )}
       </AsyncState>
 
-      {can('commentOnTask') && (
+      {canComment && (
         <form onSubmit={handleSubmit} noValidate className="mt-6 space-y-3">
           <Textarea
             label="Add a comment"

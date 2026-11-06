@@ -201,3 +201,260 @@
     animation: none;
   }
 }
+
+/* App shell: the sidebar from 768px up, the bottom bar below it. */
+.app-sidebar {
+  position: fixed;
+  inset: 0 auto 0 0;
+  z-index: 40;
+  min-height: 0;
+}
+
+.app-sidebar.is-collapsed {
+  width: 64px;
+  padding-left: 10px;
+  padding-right: 10px;
+}
+
+.app-sidebar.is-collapsed .nav-brand {
+  justify-content: center;
+  padding-left: 0;
+  padding-right: 0;
+}
+
+.app-sidebar.is-collapsed .nav-label {
+  height: 1px;
+  margin: 12px 4px;
+  padding: 0;
+  overflow: hidden;
+  color: transparent;
+  background: #1c1f58;
+}
+
+.app-sidebar.is-collapsed .nav-item {
+  justify-content: center;
+  padding: 0;
+}
+
+.app-sidebar.is-collapsed .nav-text {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+
+.nav-key {
+  min-width: 20px;
+  padding: 0 5px;
+  border: 1px solid #2a2d6a;
+  border-radius: var(--r-xs);
+  color: var(--nav-label);
+  font: inherit;
+  font-size: 11px;
+  text-align: center;
+}
+
+.bottom-bar {
+  display: none;
+}
+
+@media (max-width: 767px) {
+  .app-sidebar {
+    display: none;
+  }
+
+  .bottom-bar {
+    position: fixed;
+    inset: auto 0 0 0;
+    z-index: 30;
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    padding-bottom: env(safe-area-inset-bottom);
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+  }
+
+  .bottom-tab {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    min-height: 56px;
+    color: var(--text-2);
+    font-size: 11px;
+    font-weight: 600;
+    text-decoration: none;
+  }
+
+  .bottom-tab:hover {
+    text-decoration: none;
+  }
+
+  .bottom-tab.on {
+    color: var(--brand);
+  }
+
+  .topbar {
+    padding: 0 16px;
+  }
+}
+
+/* Dashboard */
+.checkin-card {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 16px 20px;
+  border-radius: var(--r-lg);
+  background: var(--ink);
+  color: #ffffff;
+}
+
+.checkin-card-icon {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: var(--r-md);
+  background: var(--nav-active);
+  color: var(--lavender);
+}
+
+.workload {
+  display: flex;
+  height: 6px;
+  overflow: hidden;
+  border-radius: var(--r-full);
+  background: var(--todo-bg);
+}
+
+.workload .w-over {
+  background: var(--danger);
+}
+
+.workload .w-open {
+  background: var(--brand);
+}
+
+.compact-rows .li .pr,
+.compact-rows .li .text-right {
+  display: none;
+}
+
+.compact-rows .li .badge {
+  padding-left: 6px;
+  padding-right: 6px;
+}
+
+@media (max-width: 767px) {
+  .kpi {
+    gap: 2px;
+    padding: 10px 12px;
+  }
+
+  .kpi .v {
+    font-size: 20px;
+    line-height: 26px;
+  }
+
+  .kpi .k {
+    font-size: 12px;
+  }
+
+  .kpi .k .ms,
+  .kpi-hint:not(:has(.bar)) {
+    display: none;
+  }
+
+  .checkin-card {
+    padding: 12px 16px;
+  }
+
+  .checkin-card-icon {
+    width: auto;
+    height: auto;
+    background: none;
+  }
+}
+
+.count.alert {
+  background: var(--danger-bg);
+  color: var(--danger);
+}
+
+/* Check-ins */
+.blocker-box {
+  display: flex;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: var(--r-md);
+  background: var(--danger-bg);
+  color: var(--danger);
+}
+
+.blocker-box.is-handled {
+  background: var(--surface-2);
+  color: var(--text-3);
+}
+
+.blocker-box.is-handled p {
+  text-decoration: line-through;
+}
+
+.reply-box {
+  display: flex;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: var(--r-md);
+  background: var(--brand-50);
+}
+
+.tag-late {
+  padding: 1px 6px;
+  border-radius: var(--r-xs);
+  background: var(--warning-bg);
+  color: var(--warning);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.textarea.has-blocker {
+  border-color: #f3c2bc;
+  background: var(--danger-bg);
+}
+
+/* Wide enough that a card's three actions stay on one line: two across at 1280, three at 1440. */
+.blocker-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr));
+  gap: 20px;
+  align-items: start;
+}
+
+@media (max-width: 639px) {
+  .make-task .ms {
+    display: none;
+  }
+}
+
+/* Projects */
+.project-tile {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: var(--r-md);
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.project-tile.is-large {
+  width: 60px;
+  height: 60px;
+  border-radius: var(--r-lg);
+  font-size: 22px;
+}

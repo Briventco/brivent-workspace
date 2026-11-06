@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
 import { ApiError, errorMessage } from '../../api/client';
+import { listAllProjects } from '../../api/projects';
 import { createTask, TaskChanges, updateTask } from '../../api/tasks';
 import { PersonRef, PRIORITY_LABELS, Task, TASK_PRIORITIES, TaskPriority } from '../../api/types';
 import { useSession } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
+import { useApiQuery } from '../../lib/useApiQuery';
 import { canEditDetails, fromDeadlineInput, toDeadlineInput } from '../../lib/tasks';
 import { Banner } from '../ui/Banner';
 import { Button } from '../ui/Button';
@@ -16,6 +18,8 @@ import { AssigneePicker } from './AssigneePicker';
 interface TaskFormModalProps {
   /** Edits this task. Without it, the form creates a new one. */
   task?: Task;
+  /** Starting text for a new task, such as one made from a check-in blocker. */
+  prefill?: { title?: string; description?: string; projectId?: string };
   onClose: () => void;
   onSaved: (task: Task) => void;
 }
@@ -25,17 +29,28 @@ const PRIORITY_OPTIONS = TASK_PRIORITIES.map((value) => ({
   label: PRIORITY_LABELS[value],
 }));
 
-export const TaskFormModal: React.FC<TaskFormModalProps> = ({ task, onClose, onSaved }) => {
+export const TaskFormModal: React.FC<TaskFormModalProps> = ({
+  task,
+  prefill,
+  onClose,
+  onSaved,
+}) => {
   const { user, can } = useSession();
   const toast = useToast();
 
-  const [title, setTitle] = useState(task?.title ?? '');
-  const [description, setDescription] = useState(task?.description ?? '');
+  const [title, setTitle] = useState(task?.title ?? prefill?.title ?? '');
+  const [description, setDescription] = useState(task?.description ?? prefill?.description ?? '');
   const [priority, setPriority] = useState<TaskPriority>(task?.priority ?? 'MEDIUM');
   const [deadline, setDeadline] = useState(toDeadlineInput(task?.deadline ?? null));
   const [assignee, setAssignee] = useState<PersonRef | null>(task?.assignee ?? null);
+  const [projectId, setProjectId] = useState(task?.projectId ?? prefill?.projectId ?? '');
 
-  const [errors, setErrors] = useState<{ title?: string; assignee?: string; deadline?: string }>({});
+  const [errors, setErrors] = useState<{
+    title?: string;
+    assignee?: string;
+    deadline?: string;
+    project?: string;
+  }>({});
   const [formError, setFormError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [pickerRefresh, setPickerRefresh] = useState(0);
@@ -45,6 +60,15 @@ export const TaskFormModal: React.FC<TaskFormModalProps> = ({ task, onClose, onS
   const canAssign =
     can('assignTask') && can('viewDirectory');
 
+  const projects = useApiQuery((signal) => listAllProjects(signal), []);
+  const projectOptions = [
+    { value: '', label: 'No project' },
+    ...(projects.data ?? [])
+      // A finished project takes no new work, but a task already in one keeps showing it.
+      .filter((project) => project.status !== 'COMPLETED' || project.id === task?.projectId)
+      .map((project) => ({ value: project.id, label: project.name })),
+  ];
+
   const save = (): Promise<Task | null> => {
     if (!task) {
       return createTask({
@@ -53,6 +77,7 @@ export const TaskFormModal: React.FC<TaskFormModalProps> = ({ task, onClose, onS
         priority,
         ...(deadline && { deadline: fromDeadlineInput(deadline) }),
         ...(canAssign && assignee && { assigneeId: assignee.id }),
+        ...(projectId && { projectId }),
       });
     }
 
@@ -64,6 +89,7 @@ export const TaskFormModal: React.FC<TaskFormModalProps> = ({ task, onClose, onS
       if (deadline !== toDeadlineInput(task.deadline)) {
         changes.deadline = deadline ? fromDeadlineInput(deadline) : null;
       }
+      if (projectId !== (task.projectId ?? '')) changes.projectId = projectId || null;
     }
     if (canAssign && (assignee?.id ?? null) !== task.assigneeId) {
       changes.assigneeId = assignee?.id ?? null;
@@ -78,7 +104,7 @@ export const TaskFormModal: React.FC<TaskFormModalProps> = ({ task, onClose, onS
     const nextErrors = {
       title: canEdit && !title.trim() ? 'Give the task a short title.' : undefined,
       deadline:
-        !task && deadline && new Date(deadline) < new Date()
+        !task && deadline && fromDeadlineInput(deadline) < new Date().toISOString()
           ? 'That date has passed. Pick today or later.'
           : undefined,
     };
@@ -96,7 +122,9 @@ export const TaskFormModal: React.FC<TaskFormModalProps> = ({ task, onClose, onS
       }
     } catch (error) {
       setIsSubmitting(false);
-      if (error instanceof ApiError && error.code.startsWith('ASSIGNEE_')) {
+      if (error instanceof ApiError && error.code === 'PROJECT_NOT_FOUND') {
+        setErrors({ project: error.message });
+      } else if (error instanceof ApiError && error.code.startsWith('ASSIGNEE_')) {
         setErrors({ assignee: error.message });
         setPickerRefresh((n) => n + 1);
       } else if (error instanceof ApiError && error.fieldErrors.title) {
@@ -154,6 +182,17 @@ export const TaskFormModal: React.FC<TaskFormModalProps> = ({ task, onClose, onS
                 />
               </div>
             </>
+          )}
+
+          {canEdit && projectOptions.length > 1 && (
+            <Select
+              label="Project"
+              optional
+              value={projectId}
+              options={projectOptions}
+              onChange={(e) => setProjectId(e.target.value)}
+              error={errors.project}
+            />
           )}
 
           {canAssign && (
