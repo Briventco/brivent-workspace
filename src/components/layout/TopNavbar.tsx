@@ -93,13 +93,17 @@ function usePhoneTitle(): string {
   return resolveRoute(pathname)?.title ?? 'Brivent';
 }
 
-export const TopNavbar: React.FC = () => {
+export const TopNavbar: React.FC<{ hideOnPhone?: boolean }> = ({ hideOnPhone = false }) => {
   const { can } = useSession();
   const [isCreating, setIsCreating] = useState(false);
   const title = usePhoneTitle();
 
   return (
-    <header className="topbar justify-between md:justify-end sticky top-0 z-30">
+    <header
+      className={`topbar justify-between md:justify-end sticky top-0 z-30 ${
+        hideOnPhone ? 'max-md:hidden' : ''
+      }`}
+    >
       <div className="md:hidden flex items-center gap-2 min-w-0">
         <img src={brandIcon} alt="" className="w-6 h-6 shrink-0" />
         <span className="t-h3 truncate">{title}</span>

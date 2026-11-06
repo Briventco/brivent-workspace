@@ -114,6 +114,8 @@ export interface TaskSummary {
   checkedInToday?: boolean;
   teamCheckins?: { submitted: number; notSubmitted: number; openBlockers: number };
   upcomingMeetings?: number;
+  unreadMessages?: number;
+  unreadMentions?: number;
 }
 
 export interface CheckinPerson extends PersonRef {
@@ -183,4 +185,53 @@ export interface Project {
   progress: { total: number; done: number; overdue: number };
   createdAt: string;
   updatedAt: string;
+}
+
+export const MAX_MESSAGE_LENGTH = 4_000;
+
+export interface ConversationPerson extends Named {
+  position: Named | null;
+  status: UserStatus;
+}
+
+export interface LastMessage {
+  bodyPreview: string;
+  authorName: string;
+  createdAt: string;
+}
+
+export interface Conversation {
+  id: string;
+  kind: 'CHANNEL' | 'DM';
+  /** Null on a DM. */
+  name: string | null;
+  description: string | null;
+  /** Null on a DM. */
+  visibility: 'PUBLIC' | 'PRIVATE' | null;
+  isAnnouncement: boolean;
+  isArchived: boolean;
+  department: Named | null;
+  /** The other person on a DM. */
+  otherUser: ConversationPerson | null;
+  unreadCount: number;
+  mentionCount: number;
+  lastMessage: LastMessage | null;
+  isMuted: boolean;
+  canPost: boolean;
+  canManage: boolean;
+}
+
+export interface Message {
+  id: string;
+  conversationId: string;
+  clientId: string;
+  author: ConversationPerson;
+  /** Null once deleted. */
+  body: string | null;
+  mentions: Named[];
+  /** Differs between viewers, because it only lists tasks this viewer can see. */
+  linkedTasks: LinkedTask[];
+  editedAt: string | null;
+  deletedAt: string | null;
+  createdAt: string;
 }

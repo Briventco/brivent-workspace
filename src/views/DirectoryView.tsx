@@ -1,14 +1,20 @@
 import React, { useMemo, useState } from 'react';
 import { listDepartments } from '../api/departments';
+import { errorMessage } from '../api/client';
+import { startDm } from '../api/messages';
 import { DirectoryUser, Role, ROLE_LABELS, ROLES } from '../api/types';
 import { listDirectory } from '../api/users';
 import { AsyncState } from '../components/ui/AsyncState';
 import { Avatar } from '../components/ui/Avatar';
+import { Button } from '../components/ui/Button';
 import { EmptyState } from '../components/ui/EmptyState';
 import { Input } from '../components/ui/Input';
 import { PageHeader } from '../components/ui/PageHeader';
 import { Select } from '../components/ui/Select';
+import { useSession } from '../context/AuthContext';
+import { useToast } from '../context/ToastContext';
 import { personTitle } from '../lib/people';
+import { navigate } from '../lib/router';
 import { useApiQuery } from '../lib/useApiQuery';
 import { useDebouncedValue } from '../lib/useDebouncedValue';
 
@@ -37,6 +43,9 @@ function groupByDepartment(people: DirectoryUser[]): Group[] {
 }
 
 export const DirectoryView: React.FC = () => {
+  const { user, can } = useSession();
+  const toast = useToast();
+  const [openingId, setOpeningId] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [department, setDepartment] = useState('');
   const [role, setRole] = useState<Role | ''>('');
@@ -58,6 +67,17 @@ export const DirectoryView: React.FC = () => {
   );
 
   const groups = useMemo(() => groupByDepartment(people), [people]);
+
+  const message = async (person: DirectoryUser) => {
+    setOpeningId(person.id);
+    try {
+      const { id } = await startDm(person.id);
+      navigate(`/messages/${id}`);
+    } catch (error) {
+      toast.error(errorMessage(error));
+      setOpeningId(null);
+    }
+  };
 
   return (
     <>
@@ -116,6 +136,17 @@ export const DirectoryView: React.FC = () => {
                         <p className="font-semibold truncate">{person.name}</p>
                         <p className="text-small text-text-2 truncate">{personTitle(person)}</p>
                       </div>
+                      {can('useMessages') && person.id !== user.id && (
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          onClick={() => message(person)}
+                          isLoading={openingId === person.id}
+                          aria-label={`Message ${person.name}`}
+                        >
+                          Message
+                        </Button>
+                      )}
                     </li>
                   ))}
                 </ul>

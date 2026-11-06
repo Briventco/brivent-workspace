@@ -1,4 +1,7 @@
 const BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? '').replace(/\/+$/, '');
+/** Where the API lives, without /api. Socket.IO connects here. */
+export const API_ORIGIN = BASE_URL ? new URL(BASE_URL).origin : window.location.origin;
+
 const TOKEN_KEY = 'brivent.authToken';
 const TIMEOUT_MS = 15_000;
 

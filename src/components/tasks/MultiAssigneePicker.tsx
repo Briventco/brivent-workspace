@@ -10,6 +10,10 @@ interface MultiAssigneePickerProps {
   error?: string;
   /** Bumped by the parent to re-read the list, such as after ASSIGNEE_DEACTIVATED. */
   refreshKey?: number;
+  label?: string;
+  limit?: number;
+  /** Replaces the picker once `limit` is reached. */
+  limitNote?: string;
 }
 
 export const MultiAssigneePicker: React.FC<MultiAssigneePickerProps> = ({
@@ -17,11 +21,14 @@ export const MultiAssigneePicker: React.FC<MultiAssigneePickerProps> = ({
   onChange,
   error,
   refreshKey,
+  label = 'Assignees',
+  limit = MAX_ASSIGNEES,
+  limitNote = `A task can have up to ${MAX_ASSIGNEES} people. Remove someone to add another.`,
 }) => (
   <div>
-    {value.length < MAX_ASSIGNEES ? (
+    {value.length < limit ? (
       <AssigneePicker
-        label="Assignees"
+        label={label}
         allowNone={false}
         keepOpen
         placeholder="Add people"
@@ -33,10 +40,8 @@ export const MultiAssigneePicker: React.FC<MultiAssigneePickerProps> = ({
       />
     ) : (
       <>
-        <p className="label">Assignees</p>
-        <p className="text-small text-text-2">
-          A task can have up to {MAX_ASSIGNEES} people. Remove someone to add another.
-        </p>
+        <p className="label">{label}</p>
+        <p className="text-small text-text-2">{limitNote}</p>
       </>
     )}
     {value.length > 0 && (
