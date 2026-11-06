@@ -7,6 +7,8 @@ import { DepartmentsView } from './views/DepartmentsView';
 import { DirectoryView } from './views/DirectoryView';
 import { DocumentsView } from './views/DocumentsView';
 import { ForgotPasswordView } from './views/ForgotPasswordView';
+import { EnrollmentView } from './views/EnrollmentView';
+import { LearningView } from './views/LearningView';
 import { MessagesView } from './views/MessagesView';
 import { MoreView } from './views/MoreView';
 import { NotificationsView } from './views/NotificationsView';
@@ -16,6 +18,7 @@ import { ResetPasswordView } from './views/ResetPasswordView';
 import { SetPasswordView } from './views/SetPasswordView';
 import { SettingsView } from './views/SettingsView';
 import { TaskDetailView } from './views/TaskDetailView';
+import { TrackBuilderView } from './views/TrackBuilderView';
 import { TasksView } from './views/TasksView';
 import { UsersView } from './views/UsersView';
 
@@ -41,6 +44,7 @@ const ROUTES: Record<string, AppRoute> = {
   },
   '/projects': { title: 'Projects', element: <ProjectsView />, action: 'viewProjects' },
   '/messages': { title: 'Internal Messages', element: <MessagesView />, action: 'useMessages' },
+  '/learning': { title: 'Learning', element: <LearningView />, action: 'viewLearning' },
   '/calendar': { title: 'Meetings & Schedule', element: <CalendarView />, action: 'viewMeetings' },
   '/docs': { title: 'Knowledge & SOPs', element: <DocumentsView /> },
   '/directory': {
@@ -109,6 +113,22 @@ export function resolveRoute(pathname: string): AppRoute | undefined {
       title: 'Internal Messages',
       element: <MessagesView conversationId={conversationId} />,
       action: 'useMessages',
+    };
+  }
+  const enrollmentId = pathname.match(/^\/learning\/enrollments\/([^/]+)$/)?.[1];
+  if (enrollmentId) {
+    return {
+      title: 'Learning',
+      element: <EnrollmentView key={enrollmentId} enrollmentId={enrollmentId} />,
+      action: 'viewLearning',
+    };
+  }
+  const trackId = pathname.match(/^\/learning\/tracks\/([^/]+)$/)?.[1];
+  if (trackId) {
+    return {
+      title: 'Track',
+      element: <TrackBuilderView key={trackId} trackId={trackId} />,
+      action: 'createTrack',
     };
   }
   return ROUTES[pathname];

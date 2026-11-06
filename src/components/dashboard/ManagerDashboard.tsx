@@ -18,6 +18,7 @@ import { DashboardGreeting } from './DashboardGreeting';
 import { MeetingsCard } from './MeetingsCard';
 import { BlockersCard, NotCheckedInCard } from './TeamCheckinCards';
 import { daysLate, TaskRow } from './TaskRow';
+import { LearningCard } from './LearningCard';
 import { UnreadMessagesLink } from './UnreadMessagesLink';
 
 const TASKS = '/tasks?view=all';
@@ -336,6 +337,7 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ summary, onC
       <MissingDepartmentsPrompt />
 
       <UnreadMessagesLink summary={summary} />
+      <LearningCard summary={summary} />
 
       {stats}
 

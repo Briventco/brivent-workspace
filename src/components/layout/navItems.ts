@@ -1,5 +1,7 @@
 import { useSession } from '../../context/AuthContext';
+import { listEnrollments } from '../../api/learning';
 import { Action } from '../../lib/permissions';
+import { useApiQuery } from '../../lib/useApiQuery';
 import { IconName } from '../ui/Icon';
 
 export interface NavItem {
@@ -14,6 +16,13 @@ export interface NavSection {
   title: string;
   items: NavItem[];
 }
+
+const LEARNING: NavItem = {
+  to: '/learning',
+  label: 'Learning',
+  icon: 'fact_check',
+  action: 'viewLearning',
+};
 
 const DAILY_WORK: NavSection = {
   title: 'Daily work',
@@ -47,11 +56,23 @@ const SETTINGS: NavItem = { to: '/settings', label: 'Settings', icon: 'settings'
 /** Administration only shows for people who can manage users. Everyone else gets Account. */
 export function useNavSections(): NavSection[] {
   const { can } = useSession();
+  const canBuild = can('createTrack');
+  const enrollments = useApiQuery(
+    (signal) =>
+      canBuild || !can('viewLearning') ? Promise.resolve([]) : listEnrollments('mine', {}, signal),
+    [canBuild],
+  );
+  const showLearning = canBuild || (enrollments.data?.length ?? 0) > 0;
+
   const last: NavSection = can('viewUsers')
     ? { title: 'Administration', items: [USERS, DEPARTMENTS, SETTINGS] }
     : { title: 'Account', items: [SETTINGS] };
 
-  return [DAILY_WORK, COMPANY, last]
+  const daily = showLearning
+    ? { ...DAILY_WORK, items: [...DAILY_WORK.items, LEARNING] }
+    : DAILY_WORK;
+
+  return [daily, COMPANY, last]
     .map((section) => ({
       ...section,
       items: section.items.filter((item) => !item.action || can(item.action)),

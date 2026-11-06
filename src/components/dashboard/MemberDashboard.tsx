@@ -11,6 +11,7 @@ import { CheckInCard } from './CheckInCard';
 import { DashboardGreeting } from './DashboardGreeting';
 import { MeetingsCard } from './MeetingsCard';
 import { isDueToday, TaskRow } from './TaskRow';
+import { LearningCard } from './LearningCard';
 import { UnreadMessagesLink } from './UnreadMessagesLink';
 
 const MAX_ROWS = 5;
@@ -98,6 +99,7 @@ export const MemberDashboard: React.FC<{ summary: TaskSummary }> = ({ summary })
       <CheckInCard checkedIn={summary.checkedInToday} />
 
       <UnreadMessagesLink summary={summary} />
+      <LearningCard summary={summary} />
 
       <div className="grid grid-cols-3 md:grid-cols-4 gap-3 md:gap-4 mb-5">
         <StatCard
