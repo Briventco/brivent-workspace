@@ -3,6 +3,7 @@ import { Action } from './lib/permissions';
 import { CalendarView } from './views/CalendarView';
 import { DailyCheckinView } from './views/DailyCheckinView';
 import { DashboardView } from './views/DashboardView';
+import { DepartmentsView } from './views/DepartmentsView';
 import { DirectoryView } from './views/DirectoryView';
 import { DocumentsView } from './views/DocumentsView';
 import { ForgotPasswordView } from './views/ForgotPasswordView';
@@ -55,6 +56,11 @@ const ROUTES: Record<string, AppRoute> = {
     title: 'User Management',
     element: <UsersView />,
     action: 'viewUsers',
+  },
+  '/departments': {
+    title: 'Departments',
+    element: <DepartmentsView />,
+    action: 'manageDepartments',
   },
 };
 
