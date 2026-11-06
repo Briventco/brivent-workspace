@@ -23,7 +23,7 @@ const DAILY_WORK: NavSection = {
     { to: '/tasks', label: 'My Tasks', icon: 'task_alt', action: 'viewOwnTasks' },
     { to: '/projects', label: 'Projects', icon: 'folder_open', action: 'viewProjects' },
     { to: '/messages', label: 'Internal Messages', icon: 'forum', comingSoon: true },
-    { to: '/calendar', label: 'Meetings & Schedule', icon: 'calendar_month', comingSoon: true },
+    { to: '/calendar', label: 'Meetings & Schedule', icon: 'calendar_month', action: 'viewMeetings' },
   ],
 };
 

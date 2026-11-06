@@ -40,7 +40,7 @@ const ROUTES: Record<string, AppRoute> = {
   },
   '/projects': { title: 'Projects', element: <ProjectsView />, action: 'viewProjects' },
   '/messages': { title: 'Internal Messages', element: <MessagesView /> },
-  '/calendar': { title: 'Meetings & Schedule', element: <CalendarView /> },
+  '/calendar': { title: 'Meetings & Schedule', element: <CalendarView />, action: 'viewMeetings' },
   '/docs': { title: 'Knowledge & SOPs', element: <DocumentsView /> },
   '/directory': {
     title: 'Team Directory',

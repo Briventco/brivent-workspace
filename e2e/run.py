@@ -225,6 +225,7 @@ def main():
                     run_checkins(browser, admin_token)
                 if has_projects(admin_token):
                     run_projects(browser, admin_token)
+                    run_meetings(browser, admin_token)
             run_team_lead(browser, lead_task, lead_name, intern_name)
             run_permissions(lead_email, lead_password)
             run_intern(browser, lead_task, admin_task)
@@ -977,7 +978,10 @@ def run_checkins(browser, admin_token):
     def edit():
         field = member.get_by_label("What did you finish yesterday?")
         field.fill("Wrote and sent the first draft.")
-        member.get_by_role("button", name="Update check-in").click()
+        with member.expect_request(lambda request: request.method == "PUT") as saved:
+            member.get_by_role("button", name="Update check-in").click()
+        body = saved.value.post_data_json
+        assert body["blockers"] == blocker and len(body["taskIds"]) == 1, "PUT would clear them"
         expect(member.get_by_text("Check-in updated.")).to_be_visible()
         member.reload()
         expect(field).to_have_value("Wrote and sent the first draft.")
@@ -1018,6 +1022,29 @@ def run_checkins(browser, admin_token):
         other.context.close()
     step("Check-in: after 18:00 it opens read-only (simulated)", locked_on_load)
 
+    def late_first_submission():
+        def no_checkin_yet(route):
+            if route.request.method == "GET":
+                return route.fulfill(json={"checkin": None})
+            response = route.fetch()
+            body = response.json()
+            body["checkin"].update({"editable": False, "isLate": True})
+            route.fulfill(response=response, json=body)
+
+        other = new_page(browser)
+        log_in_as(other, email, PASSWORD)
+        other.route(f"{api_url()}/checkins/today", no_checkin_yet)
+        other.goto(f"{APP}/daily")
+        other.get_by_label("What did you finish yesterday?").fill("Sent late.")
+        other.get_by_label("What are you working on today?").fill("Still sending.")
+        other.get_by_label("Anything blocking you?").fill(blocker)
+        other.get_by_role("button", name="Submit check-in").click()
+        expect(other.get_by_text("Locked at 6:00 PM")).to_be_visible()
+        expect(other.get_by_text("Late", exact=True)).to_be_visible()
+        expect(other.locator("main textarea")).to_have_count(0)
+        other.context.close()
+    step("Check-in: a first submission after 18:00 is late and can't be edited (simulated)", late_first_submission)
+
     lead = new_page(browser)
     log_in(lead, "TEAM_LEAD")
     card = lead.locator("article", has_text=blocker)
@@ -1042,6 +1069,7 @@ def run_checkins(browser, admin_token):
         expect(card.get_by_text(f"On it, run {RUN}.")).to_be_visible()
         member.goto(f"{APP}/daily")
         expect(member.get_by_text(f"On it, run {RUN}.")).to_be_visible()
+        expect(member.get_by_role("button", name="Reply")).to_have_count(0)
     step("Check-in review: a reply shows on their check-in", reply)
 
     def make_task():
@@ -1277,6 +1305,258 @@ def run_projects(browser, admin_token):
                 expect_no_sideways_scroll(page, f"{path} at {width}")
             page.context.close()
     step("Projects: list and detail fit 375, 1280 and 1440", fits)
+    lead.context.close()
+
+
+def wat_today():
+    return datetime.now(timezone(timedelta(hours=1))).strftime("%Y-%m-%d")
+
+
+def at(time_of_day):
+    return f"{wat_today()}T{time_of_day}:00+01:00"
+
+
+def run_meetings(browser, admin_token):
+    title = f"{PREFIX} Bot review"
+    block_name = re.compile(re.escape(title))
+    secret = f"{PREFIX} private meeting"
+    secret_task = f"{PREFIX} private task"
+    intern = call("POST", "/auth/login", body=dict(zip(("email", "password"), credentials("INTERN"))))["user"]
+    lead_user = call("POST", "/auth/login", body=dict(zip(("email", "password"), credentials("TEAM_LEAD"))))["user"]
+    task = call("POST", "/tasks", admin_token, {"title": f"{PREFIX} meeting task", "assigneeId": lead_user["id"]})["task"]
+
+    lead = new_page(browser)
+    log_in(lead, "TEAM_LEAD")
+    panel = lead.get_by_role("dialog")
+
+    def create():
+        expect(lead.get_by_role("link", name="Meetings & Schedule")).not_to_contain_text("Soon")
+        expect(lead.get_by_role("link", name="Internal Messages")).to_contain_text("Soon")
+        expect(lead.get_by_role("link", name="Knowledge & SOPs")).to_contain_text("Soon")
+        open_nav_link(lead, "Meetings")
+        lead.get_by_role("button", name="New meeting").click()
+        panel.get_by_label("Title").fill(title)
+        panel.get_by_label("Starts").fill("15:00")
+        panel.get_by_label("Ends").fill("14:00")
+        panel.get_by_label("Meeting link").fill("http://meet.example.test/abc")
+        panel.get_by_role("button", name="Create meeting").click()
+        expect(panel.get_by_text("End it after it starts.")).to_be_visible()
+        expect(panel.get_by_text("Use a link starting https://")).to_be_visible()
+        panel.get_by_label("Ends").fill("15:45")
+        panel.get_by_label("Meeting link").fill("https://meet.example.test/abc")
+        panel.get_by_label("Location").fill("Board room")
+        panel.get_by_label("Agenda").fill("Order sync delay.")
+        picker = panel.get_by_role("combobox", name="Attendees")
+        picker.click()
+        picker.fill(intern["name"].split()[0])
+        panel.get_by_role("option", name=re.compile(re.escape(intern["name"]))).click()
+        panel.get_by_label("Linked tasks").select_option(label=task["title"])
+        panel.get_by_role("button", name="Create meeting").click()
+        expect(panel.get_by_role("heading", name=title)).to_be_visible()
+        expect(lead.get_by_role("button", name=block_name)).to_be_visible()
+    step("Meetings: managers create one, and bad times and http links are caught", create)
+
+    def details():
+        expect(panel.get_by_text("Board room")).to_be_visible()
+        expect(panel.get_by_text("3:00 to 3:45 PM")).to_be_visible()
+        expect(panel.get_by_text("Order sync delay.")).to_be_visible()
+        expect(panel.get_by_role("link", name=task["title"])).to_be_visible()
+        expect(panel.get_by_text("Organiser")).to_be_visible()
+        expect(panel.get_by_text("No reply yet")).to_be_visible()
+        join = panel.get_by_role("link", name="Join meeting")
+        expect(join).to_have_attribute("href", "https://meet.example.test/abc")
+    step("Meetings: the panel shows place, people, agenda, tasks and the join link", details)
+
+    def edit_keeps_lists():
+        panel.get_by_role("button", name="Edit").click()
+        panel.get_by_label("Location").fill("Ikeja office")
+        with lead.expect_request(lambda request: request.method == "PATCH") as saved:
+            panel.get_by_role("button", name="Save changes").click()
+        body = saved.value.post_data_json
+        assert body == {"location": "Ikeja office"}, f"Sent more than the change: {body}"
+        expect(lead.get_by_text("Meeting updated.")).to_be_visible()
+        expect(panel.get_by_text("Ikeja office")).to_be_visible()
+    step("Meetings: a save only sends what changed, so hidden tasks can't be dropped", edit_keeps_lists)
+
+    intern_page = new_page(browser)
+    log_in(intern_page, "INTERN")
+
+    def intern_rsvp():
+        intern_page.goto(f"{APP}/calendar")
+        expect(intern_page.get_by_role("button", name="New meeting")).to_have_count(0)
+        intern_page.get_by_role("button", name=block_name).click()
+        dialog = intern_page.get_by_role("dialog")
+        expect(dialog.get_by_role("button", name="Edit")).to_have_count(0)
+        expect(dialog.get_by_role("button", name="Cancel meeting")).to_have_count(0)
+        dialog.get_by_role("button", name="Going").click()
+        expect(dialog.get_by_role("button", name="Going")).to_have_attribute("aria-pressed", "true")
+        expect(dialog.get_by_text("Going", exact=True).last).to_be_visible()
+        lead.reload()
+        expect(panel.get_by_role("listitem").filter(has_text=intern["name"])).to_contain_text("Going")
+    step("Meetings: attendees answer their own invite, with no manager actions", intern_rsvp)
+
+    def dashboard_card():
+        intern_page.goto(f"{APP}/")
+        card = intern_page.get_by_role("link", name=block_name)
+        expect(card).to_be_visible()
+        call_token = call("POST", "/auth/login", body=dict(zip(("email", "password"), credentials("INTERN"))))["token"]
+        meeting = call("GET", f"/meetings?from={wat_today()}&to={wat_today()}", call_token)["meetings"]
+        mine = next(item for item in meeting if item["title"] == title)
+        call("POST", f"/meetings/{mine['id']}/rsvp", call_token, {"response": "NO"})
+        intern_page.reload()
+        expect(intern_page.get_by_role("heading", name="Today's meetings")).to_be_visible()
+        expect(card).to_have_count(0)
+        call("POST", f"/meetings/{mine['id']}/rsvp", call_token, {"response": "YES"})
+    step("Dashboard: Today's meetings lists real meetings and drops invites answered No", dashboard_card)
+
+    def whole_team():
+        project = call("POST", "/projects", admin_token, {"name": f"{PREFIX} private project"})["project"]
+        hidden = call("POST", "/tasks", admin_token, {"title": secret_task, "projectId": project["id"]})["task"]
+        call("POST", "/meetings", admin_token, {
+            "title": secret,
+            "startsAt": at("16:00"),
+            "endsAt": at("16:30"),
+            "attendeeIds": [],
+            "projectId": project["id"],
+            "taskIds": [hidden["id"]],
+        })
+        intern_page.goto(f"{APP}/calendar")
+        name = re.compile(re.escape(secret))
+        expect(intern_page.get_by_role("button", name=block_name)).to_be_visible()
+        expect(intern_page.get_by_role("button", name=name)).to_have_count(0)
+        intern_page.get_by_role("button", name="Whole team").click()
+        intern_page.get_by_role("button", name=name).click()
+        dialog = intern_page.get_by_role("dialog")
+        expect(dialog.get_by_role("heading", name=secret)).to_be_visible()
+        expect(dialog.get_by_text("Are you going?")).to_have_count(0)
+        expect(dialog.get_by_text("Linked tasks")).to_have_count(0)
+        expect(dialog.get_by_text(secret_task)).to_have_count(0)
+        expect(dialog.get_by_text(f"{PREFIX} private project")).to_have_count(0)
+        expect(intern_page.get_by_text("Something went wrong")).to_have_count(0)
+    step("Meetings: Whole team shows everyone's, hiding what the viewer can't see", whole_team)
+
+    def only_organizer_edits():
+        lead.goto(f"{APP}/calendar")
+        lead.get_by_role("button", name="Whole team").click()
+        lead.get_by_role("button", name=re.compile(re.escape(secret))).click()
+        expect(panel.get_by_role("heading", name=secret)).to_be_visible()
+        expect(panel.get_by_role("button", name="Edit")).to_have_count(0)
+        admin = new_page(browser)
+        log_in(admin, "SUPER_ADMIN")
+        admin.goto(lead.url)
+        expect(admin.get_by_role("dialog").get_by_role("button", name="Edit")).to_be_visible()
+        admin.context.close()
+    step("Meetings: Team Leads only edit their own, and Super Admin can edit any", only_organizer_edits)
+
+    def overlaps():
+        call("POST", "/meetings", admin_token, {
+            "title": f"{PREFIX} overlap",
+            "startsAt": at("15:15"),
+            "endsAt": at("15:45"),
+            "attendeeIds": [],
+        })
+        page = new_page(browser)
+        log_in(page, "SUPER_ADMIN")
+        page.goto(f"{APP}/calendar")
+        page.get_by_role("button", name="Whole team").click()
+        first = page.get_by_role("button", name=block_name).bounding_box()
+        second = page.get_by_role("button", name=re.compile(re.escape(f"{PREFIX} overlap"))).bounding_box()
+        assert first["x"] + first["width"] <= second["x"] + 1 or second["x"] + second["width"] <= first["x"] + 1, "They overlap"
+        page.context.close()
+    step("Meetings: overlapping meetings sit side by side", overlaps)
+
+    def wat_for_everyone():
+        context = browser.new_context(viewport=LAPTOP, timezone_id="America/New_York")
+        page = context.new_page()
+        log_in(page, "INTERN")
+        page.goto(f"{APP}/calendar")
+        page.get_by_role("button", name=block_name).click()
+        expect(page.get_by_role("dialog").get_by_text("3:00 to 3:45 PM")).to_be_visible()
+        context.close()
+    step("Meetings: times stay in WAT for a viewer in another timezone", wat_for_everyone)
+
+    def phone():
+        page = new_page(browser, MOBILE)
+        log_in(page, "INTERN")
+        page.goto(f"{APP}/calendar")
+        expect(page.get_by_role("group", name="Pick a day")).to_be_visible()
+        expect(page.get_by_role("region", name="Schedule")).to_have_count(0)
+        expect_no_sideways_scroll(page, "/calendar")
+        page.get_by_role("button", name=block_name).click()
+        box = page.get_by_role("dialog").bounding_box()
+        assert box["width"] >= MOBILE["width"] - 1, "The panel isn't full screen"
+        page.context.close()
+    step("Meetings: phones get a day strip and agenda, with a full-screen panel", phone)
+
+    def day_view():
+        lead.goto(f"{APP}/calendar")
+        lead.get_by_role("button", name="Day", exact=True).click()
+        expect(lead.locator(".week-day")).to_have_count(1)
+        expect(lead.get_by_role("button", name="Next day")).to_be_visible()
+        lead.get_by_role("button", name="Week", exact=True).click()
+        lead.get_by_role("button", name="Show task deadlines").click()
+        expect(lead.locator(".chip.on", has_text="Show task deadlines")).to_be_visible()
+    step("Meetings: Day and Week views, and the task deadlines overlay", day_view)
+
+    def cancel():
+        lead.goto(f"{APP}/calendar")
+        lead.get_by_role("button", name=block_name).click()
+        panel.get_by_role("button", name="Cancel meeting").click()
+        confirm = lead.get_by_role("dialog").filter(has_text="Cancel this meeting?")
+        expect(confirm.get_by_text("struck through")).to_be_visible()
+        confirm.get_by_role("button", name="Cancel meeting").click()
+        expect(lead.get_by_text("Meeting cancelled.")).to_be_visible()
+        block = lead.get_by_role("button", name=re.compile(re.escape(title) + ".*cancelled"))
+        expect(block).to_have_css("text-decoration-line", "line-through")
+        expect(panel.get_by_role("link", name="Join meeting")).to_have_count(0)
+        expect(panel.get_by_role("button", name="Edit")).to_have_count(0)
+        intern_page.goto(f"{APP}/calendar")
+        expect(intern_page.get_by_role("button", name=re.compile(re.escape(title) + ".*cancelled"))).to_be_visible()
+    step("Meetings: cancel asks first, then stays struck through for attendees", cancel)
+
+    def cancelled_hidden_from_others():
+        token = call("POST", "/auth/login", body=dict(zip(("email", "password"), credentials("TEAM_LEAD"))))["token"]
+        mine = call("POST", "/meetings", admin_token, {
+            "title": f"{PREFIX} called off",
+            "startsAt": at("17:00"),
+            "endsAt": at("17:30"),
+            "attendeeIds": [],
+        })["meeting"]
+        call("POST", f"/meetings/{mine['id']}/cancel", admin_token)
+        seen = call("GET", f"/meetings?from={wat_today()}&to={wat_today()}&scope=team", token)["meetings"]
+        assert mine["id"] not in [item["id"] for item in seen]
+        intern_page.goto(f"{APP}/calendar")
+        intern_page.get_by_role("button", name="Whole team").click()
+        expect(intern_page.get_by_role("button", name=re.compile(re.escape(f"{PREFIX} called off")))).to_have_count(0)
+    step("Meetings: cancelled meetings stay off Whole team for people not invited", cancelled_hidden_from_others)
+
+    def states():
+        page = new_page(browser)
+        log_in(page, "INTERN")
+        page.route(f"{api_url()}/meetings*", lambda route: route.abort())
+        page.goto(f"{APP}/calendar")
+        expect(page.get_by_role("heading", name="Couldn't load meetings")).to_be_visible()
+        page.unroute_all()
+        page.route(f"{api_url()}/meetings*", lambda route: route.fulfill(json={"meetings": []}))
+        page.get_by_role("button", name="Try again").click()
+        expect(page.get_by_text("Nothing scheduled for you this week.")).to_be_visible()
+        page.unroute_all()
+        page.goto(f"{APP}/calendar?meeting=7d4f3e6a-0000-4000-8000-000000000000")
+        expect(page.get_by_role("heading", name="This meeting isn't available")).to_be_visible()
+        page.context.close()
+    step("Meetings: error, empty and missing-meeting states (error and empty simulated)", states)
+
+    def fits():
+        for width in (1280, 1440):
+            for role in ("INTERN", "TEAM_LEAD"):
+                page = new_page(browser, {"width": width, "height": 800})
+                log_in(page, role)
+                page.goto(f"{APP}/calendar")
+                page.get_by_role("heading", level=1).wait_for()
+                expect_no_sideways_scroll(page, f"/calendar at {width}")
+                page.context.close()
+    step("Meetings: fits 1280 and 1440", fits)
+    intern_page.context.close()
     lead.context.close()
 
 
