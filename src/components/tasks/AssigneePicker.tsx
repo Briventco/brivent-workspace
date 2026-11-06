@@ -1,10 +1,11 @@
 import React, { useEffect, useId, useRef, useState } from 'react';
 import { errorMessage } from '../../api/client';
-import { DirectoryUser, PersonRef, ROLE_LABELS } from '../../api/types';
+import { DirectoryUser, PersonRef } from '../../api/types';
 import { searchDirectory } from '../../api/users';
 import { Icon } from '../ui/Icon';
 import { useApiQuery } from '../../lib/useApiQuery';
 import { useDebouncedValue } from '../../lib/useDebouncedValue';
+import { personTitle } from '../../lib/people';
 
 interface AssigneePickerProps {
   value: PersonRef | null;
@@ -15,6 +16,8 @@ interface AssigneePickerProps {
   label?: string;
   /** Offers "Unassigned". Turn it off where someone has to be chosen. */
   allowNone?: boolean;
+  /** What "nobody" is called, where that isn't "Unassigned". */
+  noneLabel?: string;
   /** Shown when nobody is chosen and "Unassigned" isn't an option. */
   placeholder?: string;
   /** People who can't be picked, such as those already on a project. */
@@ -30,6 +33,7 @@ export const AssigneePicker: React.FC<AssigneePickerProps> = ({
   refreshKey = 0,
   label = 'Assignee',
   allowNone = true,
+  noneLabel = 'Unassigned',
   placeholder = 'Search by name',
   excludeIds = [],
 }) => {
@@ -64,7 +68,7 @@ export const AssigneePicker: React.FC<AssigneePickerProps> = ({
   }, [isOpen]);
 
   const choose = (person: DirectoryUser | null) => {
-    onChange(person && { id: person.id, name: person.name });
+    onChange(person);
     setSearch('');
     setIsOpen(false);
   };
@@ -109,7 +113,7 @@ export const AssigneePicker: React.FC<AssigneePickerProps> = ({
             aria-invalid={error ? true : undefined}
             aria-describedby={describedBy}
             autoComplete="off"
-            value={isOpen ? search : (value?.name ?? (allowNone ? 'Unassigned' : ''))}
+            value={isOpen ? search : (value?.name ?? (allowNone ? noneLabel : ''))}
             placeholder={isOpen ? 'Search by name' : placeholder}
             onChange={(e) => {
               setSearch(e.target.value);
@@ -152,10 +156,10 @@ export const AssigneePicker: React.FC<AssigneePickerProps> = ({
               {person ? (
                 <>
                   <span className="font-semibold">{person.name}</span>
-                  <span className="block text-small text-text-2">{ROLE_LABELS[person.role]}</span>
+                  <span className="block text-small text-text-2">{personTitle(person)}</span>
                 </>
               ) : (
-                <span>Unassigned</span>
+                <span>{noneLabel}</span>
               )}
             </li>
           ))}

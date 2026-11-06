@@ -12,7 +12,13 @@ export type Role = (typeof ROLES)[number];
 export type UserStatus = 'PENDING' | 'ACTIVE' | 'DEACTIVATED';
 export const USER_STATUSES: UserStatus[] = ['ACTIVE', 'PENDING', 'DEACTIVATED'];
 
-export interface User {
+/** What someone does. It never affects access: `role` alone does that. */
+export interface Placement {
+  department?: Named | null;
+  position?: Named | null;
+}
+
+export interface User extends Placement {
   id: string;
   fullName: string;
   email: string;
@@ -56,10 +62,12 @@ export const PRIORITY_LABELS: Record<TaskPriority, string> = {
   URGENT: 'Urgent',
 };
 
-export interface PersonRef {
+export interface Named {
   id: string;
   name: string;
 }
+
+export interface PersonRef extends Named, Placement {}
 
 export interface Task {
   id: string;
@@ -77,7 +85,7 @@ export interface Task {
   assignedBy: PersonRef | null;
   assignedAt: string | null;
   projectId: string | null;
-  project: PersonRef | null;
+  project: Named | null;
   createdAt: string;
   updatedAt: string;
 }

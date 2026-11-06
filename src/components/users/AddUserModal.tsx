@@ -9,6 +9,14 @@ import { Input } from '../ui/Input';
 import { Modal, ModalBody, ModalFooter } from '../ui/Modal';
 import { Select } from '../ui/Select';
 import { EmailResultModal } from './EmailResultModal';
+import {
+  NO_PLACEMENT,
+  PlacementErrors,
+  placementErrors,
+  PlacementFields,
+  PlacementValue,
+  toPlacementIds,
+} from './PlacementFields';
 
 interface AddUserModalProps {
   canAssignSuperAdmin: boolean;
@@ -16,7 +24,7 @@ interface AddUserModalProps {
   onCreated: () => void;
 }
 
-interface FieldErrors {
+interface FieldErrors extends PlacementErrors {
   fullName?: string;
   email?: string;
 }
@@ -28,6 +36,8 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
 }) => {
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
+  const [placement, setPlacement] = useState<PlacementValue>(NO_PLACEMENT);
+  const [refreshKey, setRefreshKey] = useState(0);
   const [role, setRole] = useState<Role>('TEAM_MEMBER');
   const [errors, setErrors] = useState<FieldErrors>({});
   const [formError, setFormError] = useState('');
@@ -51,10 +61,21 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
 
     setIsSubmitting(true);
     try {
-      setResult(await createUser({ fullName: fullName.trim(), email: email.trim(), role }));
+      setResult(
+        await createUser({
+          fullName: fullName.trim(),
+          email: email.trim(),
+          role,
+          ...toPlacementIds(placement),
+        }),
+      );
       onCreated();
     } catch (error) {
-      if (error instanceof ApiError && error.code === 'EMAIL_ALREADY_EXISTS') {
+      const placementError = placementErrors(error);
+      if (placementError) {
+        setErrors(placementError);
+        setRefreshKey((key) => key + 1);
+      } else if (error instanceof ApiError && error.code === 'EMAIL_ALREADY_EXISTS') {
         setErrors({ email: error.message });
       } else if (error instanceof ApiError && Object.keys(error.fieldErrors).length > 0) {
         const { name, email: emailError } = error.fieldErrors;
@@ -106,11 +127,18 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
             error={errors.email}
             autoComplete="off"
           />
+          <PlacementFields
+            value={placement}
+            onChange={setPlacement}
+            errors={errors}
+            refreshKey={refreshKey}
+          />
           <Select
-            label="Role"
+            label="Access level"
             value={role}
             onChange={(e) => setRole(e.target.value as Role)}
             options={roleOptions}
+            helperText="Decides what they can do in the workspace."
           />
         </ModalBody>
         <ModalFooter>

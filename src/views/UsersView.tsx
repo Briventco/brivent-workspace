@@ -1,11 +1,13 @@
 import React, { useState } from 'react';
 import { format } from 'date-fns';
 import { errorMessage } from '../api/client';
+import { listDepartments } from '../api/departments';
 import { User } from '../api/types';
 import {
   deactivateUser,
   EmailedLinkResult,
   listUsers,
+  listUsersWithoutDepartment,
   reactivateUser,
   resendInvite,
   USERS_PAGE_SIZE,
@@ -24,17 +26,42 @@ import { AddUserModal } from '../components/users/AddUserModal';
 import { EditUserModal } from '../components/users/EditUserModal';
 import { EmailResultModal } from '../components/users/EmailResultModal';
 import { ResetPasswordModal } from '../components/users/ResetPasswordModal';
+import { Select } from '../components/ui/Select';
 import { useAuth, useSession } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
+import { navigate, useSearch } from '../lib/router';
 import { useApiQuery } from '../lib/useApiQuery';
+
+const NO_DEPARTMENT = 'none';
 
 export const UsersView: React.FC = () => {
   const { refresh } = useAuth();
   const { user: currentUser, can } = useSession();
   const toast = useToast();
 
+  const search = useSearch();
+  const department = new URLSearchParams(search).get('department') ?? '';
+  const isMissingDepartment = department === NO_DEPARTMENT;
+
   const [page, setPage] = useState(1);
-  const query = useApiQuery<UsersPage>((signal) => listUsers(page, signal), [page]);
+  const query = useApiQuery<UsersPage>(
+    (signal) =>
+      isMissingDepartment
+        ? listUsersWithoutDepartment(signal).then((users) => ({ users, total: users.length }))
+        : listUsers(page, department, signal),
+    [page, department],
+  );
+  const departments = useApiQuery((signal) => listDepartments(signal), []);
+  const departmentFilter = [
+    { value: '', label: 'All departments' },
+    { value: NO_DEPARTMENT, label: 'Active, no department' },
+    ...(departments.data ?? []).map(({ id, name }) => ({ value: id, label: name })),
+  ];
+
+  const chooseDepartment = (value: string) => {
+    setPage(1);
+    navigate(value ? `/users?department=${value}` : '/users', { replace: true });
+  };
 
   const [isAdding, setIsAdding] = useState(false);
   const [editing, setEditing] = useState<User | null>(null);
@@ -103,7 +130,7 @@ export const UsersView: React.FC = () => {
     <>
       <PageHeader
         title="User Management"
-        description="Add people to the workspace and manage their roles and access."
+        description="Add people to the workspace and manage where they sit and what they can access."
         actions={
           canCreate && (
             <Button icon="person_add" onClick={() => setIsAdding(true)}>
@@ -113,16 +140,37 @@ export const UsersView: React.FC = () => {
         }
       />
 
+      <div className="mb-4 sm:max-w-[16rem]">
+        <Select
+          label="Department"
+          value={department}
+          options={departmentFilter}
+          onChange={(e) => chooseDepartment(e.target.value)}
+        />
+      </div>
+
       <AsyncState
         query={query}
         loadingLabel="Loading users…"
         isEmpty={(data) => data.users.length === 0}
         empty={
-          <EmptyState
-            icon="groups"
-            title="No users yet"
-            description="People you add to the workspace will appear here."
-          />
+          department ? (
+            <EmptyState
+              icon="groups"
+              title={isMissingDepartment ? 'Everyone has a department' : 'Nobody here yet'}
+              description={
+                isMissingDepartment
+                  ? 'All active people have been placed.'
+                  : 'People you add to this department will appear here.'
+              }
+            />
+          ) : (
+            <EmptyState
+              icon="groups"
+              title="No users yet"
+              description="People you add to the workspace will appear here."
+            />
+          )
         }
       >
         {({ users, total }) => (
@@ -131,7 +179,9 @@ export const UsersView: React.FC = () => {
               <thead>
                 <tr>
                   <th scope="col">Name</th>
-                  <th scope="col">Role</th>
+                  <th scope="col">Department</th>
+                  <th scope="col">Position</th>
+                  <th scope="col">Access level</th>
                   <th scope="col">Status</th>
                   <th scope="col" className="hidden 2xl:table-cell">Added</th>
                   <th scope="col">
@@ -158,6 +208,8 @@ export const UsersView: React.FC = () => {
                           </div>
                         </div>
                       </td>
+                      <td className="text-text-2">{user.department?.name ?? 'Not set'}</td>
+                      <td className="text-text-2">{user.position?.name ?? 'Not set'}</td>
                       <td>
                         <RoleBadge role={user.role} />
                       </td>
@@ -185,7 +237,7 @@ export const UsersView: React.FC = () => {
                               aria-label={`Edit ${user.fullName}`}
                               title={`Edit ${user.fullName}`}
                             >
-                              <span className="hidden xl:inline">Edit</span>
+                              <span className="hidden 2xl:inline">Edit</span>
                             </Button>
                           )}
                           {canResendInvite && user.status === 'PENDING' && (
@@ -198,7 +250,7 @@ export const UsersView: React.FC = () => {
                               aria-label={`Resend invite to ${user.fullName}`}
                               title={`Resend invite to ${user.fullName}`}
                             >
-                              <span className="hidden xl:inline">Resend invite</span>
+                              <span className="hidden 2xl:inline">Resend invite</span>
                             </Button>
                           )}
                           {canResetPassword && !isSelf && isActive && (
@@ -210,7 +262,7 @@ export const UsersView: React.FC = () => {
                               aria-label={`Reset password for ${user.fullName}`}
                               title={`Reset password for ${user.fullName}`}
                             >
-                              <span className="hidden xl:inline">Reset password</span>
+                              <span className="hidden 2xl:inline">Reset password</span>
                             </Button>
                           )}
                           {canDeactivate && canManage(user) && !isSelf && (
@@ -222,7 +274,7 @@ export const UsersView: React.FC = () => {
                               aria-label={`${isDeactivated ? 'Reactivate' : 'Deactivate'} ${user.fullName}`}
                               title={`${isDeactivated ? 'Reactivate' : 'Deactivate'} ${user.fullName}`}
                             >
-                              <span className="hidden xl:inline">
+                              <span className="hidden 2xl:inline">
                                 {isDeactivated ? 'Reactivate' : 'Deactivate'}
                               </span>
                             </Button>
@@ -235,7 +287,9 @@ export const UsersView: React.FC = () => {
               </tbody>
             </Table>
 
-            <Pagination page={page} pageSize={USERS_PAGE_SIZE} total={total} onChange={setPage} />
+            {!isMissingDepartment && (
+              <Pagination page={page} pageSize={USERS_PAGE_SIZE} total={total} onChange={setPage} />
+            )}
           </div>
         )}
       </AsyncState>

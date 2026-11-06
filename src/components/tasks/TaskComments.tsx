@@ -3,6 +3,7 @@ import { errorMessage } from '../../api/client';
 import { addComment, COMMENTS_PAGE_SIZE, listComments } from '../../api/tasks';
 import { TaskComment } from '../../api/types';
 import { useToast } from '../../context/ToastContext';
+import { nameAndTitle } from '../../lib/people';
 import { formatDateTime } from '../../lib/tasks';
 import { useApiQuery } from '../../lib/useApiQuery';
 import { AsyncState } from '../ui/AsyncState';
@@ -67,7 +68,7 @@ export const TaskComments: React.FC<{ taskId: string; canComment: boolean }> = (
                   <Avatar name={comment.author.name} id={comment.author.id} />
                   <div className="min-w-0 flex-1">
                     <p>
-                      <span className="font-medium text-text">{comment.author.name}</span>{' '}
+                      <span className="font-medium text-text">{nameAndTitle(comment.author)}</span>{' '}
                       <time dateTime={comment.createdAt} className="text-small text-text-3">
                         {formatDateTime(comment.createdAt)}
                       </time>

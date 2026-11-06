@@ -14,6 +14,7 @@ import { EmptyState } from '../components/ui/EmptyState';
 import { Select } from '../components/ui/Select';
 import { useSession } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
+import { nameAndTitle } from '../lib/people';
 import { Link, navigate } from '../lib/router';
 import { canChangeStatus, canEditDetails, formatDateTime, canComment } from '../lib/tasks';
 import { useApiQuery } from '../lib/useApiQuery';
@@ -77,15 +78,15 @@ const TaskDetails: React.FC<{ task: Task; onChanged: () => void }> = ({ task, on
           },
         ]
       : []),
-    { label: 'Assignee', value: task.assignee?.name ?? 'Unassigned' },
+    { label: 'Assignee', value: task.assignee ? nameAndTitle(task.assignee) : 'Unassigned' },
     ...(task.assignedBy && task.assignedAt
       ? [
-          { label: 'Assigned by', value: task.assignedBy.name },
+          { label: 'Assigned by', value: nameAndTitle(task.assignedBy) },
           { label: 'Assigned on', value: formatDateTime(task.assignedAt) },
         ]
       : []),
     { label: 'Deadline', value: task.deadline ? formatDateTime(task.deadline) : 'No deadline' },
-    { label: 'Created by', value: task.creator.name },
+    { label: 'Created by', value: nameAndTitle(task.creator) },
     { label: 'Created on', value: formatDateTime(task.createdAt) },
     ...(task.completedAt ? [{ label: 'Completed on', value: formatDateTime(task.completedAt) }] : []),
   ];

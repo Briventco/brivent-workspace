@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { ApiError, errorMessage } from '../api/client';
 import { addProjectMembers, getProject, removeProjectMember } from '../api/projects';
 import { listEveryTask, listOpenTasks } from '../api/tasks';
-import { Project, ROLE_LABELS, Task } from '../api/types';
+import { Project, Task } from '../api/types';
 import { TaskRow } from '../components/dashboard/TaskRow';
 import { ProjectFormPanel } from '../components/projects/ProjectFormPanel';
 import {
@@ -23,6 +23,7 @@ import { Select } from '../components/ui/Select';
 import { Tabs } from '../components/ui/Tabs';
 import { useSession } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
+import { nameAndTitle, personTitle } from '../lib/people';
 import { Link, navigate } from '../lib/router';
 import { ApiQuery, useApiQuery } from '../lib/useApiQuery';
 import { daysBetween, formatDayMonth, formatShortDate, watDayStart, weekStart } from '../lib/wat';
@@ -210,7 +211,7 @@ const MembersCard: React.FC<{
                 <p className="title truncate">{member.name}</p>
                 <p className="text-small text-text-2">
                   {isOwner ? 'Owner · ' : ''}
-                  {ROLE_LABELS[member.role]}
+                  {personTitle(member)}
                   {!isOwner && ` · ${openCount(member.id)} open`}
                 </p>
               </div>
@@ -261,7 +262,7 @@ const AboutCard: React.FC<{ project: Project }> = ({ project }) => (
           </>
         )}
         <dt className="text-text-2">Owner</dt>
-        <dd>{project.owner.name}</dd>
+        <dd>{nameAndTitle(project.owner)}</dd>
       </dl>
     </CardBody>
   </Card>

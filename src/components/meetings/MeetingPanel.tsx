@@ -3,6 +3,7 @@ import { ApiError, errorMessage } from '../../api/client';
 import { answerMeeting, cancelMeeting, getMeeting, Meeting, Rsvp } from '../../api/meetings';
 import { useSession } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
+import { nameAndTitle, personTitle } from '../../lib/people';
 import { Link } from '../../lib/router';
 import { useApiQuery } from '../../lib/useApiQuery';
 import { formatShortDate, watDate } from '../../lib/wat';
@@ -76,7 +77,7 @@ const Details: React.FC<{
             </a>
           </Fact>
         )}
-        <Fact icon="person">Organised by {meeting.organizer.name}</Fact>
+        <Fact icon="person">Organised by {nameAndTitle(meeting.organizer)}</Fact>
         {meeting.project && (
           <Fact icon="folder_open">
             <Link to={`/projects/${meeting.project.id}`}>{meeting.project.name}</Link>
@@ -106,9 +107,14 @@ const Details: React.FC<{
             return (
               <li key={person.id} className="flex items-center gap-2.5 min-w-0">
                 <Avatar name={person.name} id={person.id} size="sm" />
-                <span className="grow truncate">
-                  {person.name}
-                  {person.id === user.id && ' (you)'}
+                <span className="grow min-w-0">
+                  <span className="block truncate">
+                    {person.name}
+                    {person.id === user.id && ' (you)'}
+                  </span>
+                  <span className="block text-small text-text-2 truncate">
+                    {personTitle(person)}
+                  </span>
                 </span>
                 <span
                   className={`text-small shrink-0 ${person.rsvp === 'YES' && !isOrganizer ? 'font-semibold text-success' : 'text-text-2'}`}

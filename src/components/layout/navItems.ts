@@ -36,13 +36,19 @@ const COMPANY: NavSection = {
 };
 
 const USERS: NavItem = { to: '/users', label: 'User Management', icon: 'manage_accounts' };
+const DEPARTMENTS: NavItem = {
+  to: '/departments',
+  label: 'Departments',
+  icon: 'badge',
+  action: 'manageDepartments',
+};
 const SETTINGS: NavItem = { to: '/settings', label: 'Settings', icon: 'settings' };
 
 /** Administration only shows for people who can manage users. Everyone else gets Account. */
 export function useNavSections(): NavSection[] {
   const { can } = useSession();
   const last: NavSection = can('viewUsers')
-    ? { title: 'Administration', items: [USERS, SETTINGS] }
+    ? { title: 'Administration', items: [USERS, DEPARTMENTS, SETTINGS] }
     : { title: 'Account', items: [SETTINGS] };
 
   return [DAILY_WORK, COMPANY, last]

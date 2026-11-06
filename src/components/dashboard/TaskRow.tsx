@@ -1,5 +1,6 @@
 import React from 'react';
 import { STATUS_LABELS, Task } from '../../api/types';
+import { nameAndTitle } from '../../lib/people';
 import { Link } from '../../lib/router';
 import { daysBetween, formatShortDate, watDate } from '../../lib/wat';
 import { Avatar } from '../ui/Avatar';
@@ -69,7 +70,7 @@ export const TaskRow: React.FC<TaskRowProps> = ({ task, showAssignee = false }) 
         <PriorityBadge priority={task.priority} />
       </span>
       {showAssignee && (
-        <span className="hidden sm:block shrink-0" title={task.assignee?.name ?? 'Unassigned'}>
+        <span className="hidden sm:block shrink-0" title={task.assignee ? nameAndTitle(task.assignee) : 'Unassigned'}>
           {task.assignee ? (
             <Avatar name={task.assignee.name} id={task.assignee.id} size="sm" />
           ) : (

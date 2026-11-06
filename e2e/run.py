@@ -226,6 +226,7 @@ def main():
                 if has_projects(admin_token):
                     run_projects(browser, admin_token)
                     run_meetings(browser, admin_token)
+                    run_departments(browser, admin_token)
             run_team_lead(browser, lead_task, lead_name, intern_name)
             run_permissions(lead_email, lead_password)
             run_intern(browser, lead_task, admin_task)
@@ -502,7 +503,7 @@ def run_admin(browser, page, title, throwaway, intern_name):
         open_nav_link(page, "Team Directory")
         page.get_by_label("Search by name").fill(intern_name.split()[0])
         expect(page.get_by_text(intern_name)).to_be_visible()
-        page.get_by_label("Role").select_option("SUPER_ADMIN")
+        page.get_by_label("Access level").select_option("SUPER_ADMIN")
         expect(page.get_by_text(intern_name)).to_have_count(0)
         expect(page.locator("main").get_by_text("@")).to_have_count(0)
     step("Super Admin: directory search and role filter, no emails shown", directory)
@@ -584,7 +585,7 @@ def run_invites(browser, admin):
         expect(dialog.locator("input[type=password]")).to_have_count(0)
         dialog.get_by_label("Full name").fill(name)
         dialog.get_by_label("Work email").fill(email)
-        dialog.get_by_label("Role").select_option("INTERN")
+        dialog.get_by_label("Access level").select_option("INTERN")
         dialog.get_by_role("button", name="Send invite").click()
         expect(dialog.get_by_text(f"Invite sent to {email}")).to_be_visible()
         expect(dialog.get_by_role("button", name="Copy")).to_have_count(0)
@@ -1314,6 +1315,357 @@ def wat_today():
 
 def at(time_of_day):
     return f"{wat_today()}T{time_of_day}:00+01:00"
+
+
+def run_departments(browser, admin_token):
+    lead_login = dict(zip(("email", "password"), credentials("TEAM_LEAD")))
+    intern_login = dict(zip(("email", "password"), credentials("INTERN")))
+    lead_auth = call("POST", "/auth/login", body=lead_login)
+    lead_user, lead_token = lead_auth["user"], lead_auth["token"]
+    intern_user = call("POST", "/auth/login", body=intern_login)["user"]
+    lead_name, intern_name = lead_user["name"], intern_user["name"]
+    invited, invited_email = f"E2E Placed {RUN}", f"e2e.placed.{RUN}@example.test"
+    department_name, position_name = f"E2E Studio {RUN}", f"E2E Animator {RUN}"
+    stand_in, stand_in_email = f"E2E Stand-in {RUN}", f"e2e.standin.{RUN}@example.test"
+
+    departments = call("GET", "/departments", admin_token)["departments"]
+    by_name = {department["name"]: department for department in departments}
+    creative, engineering = by_name["Creative"], by_name["Engineering"]
+    designer = next(p for p in creative["positions"] if p["name"] == "Graphic Designer")
+
+    def clear(user_id):
+        call("PATCH", f"/users/{user_id}", admin_token, {"departmentId": None, "positionId": None})
+
+    # Everyone but the seeded admin may carry a placement from an earlier run.
+    clear(lead_user["id"])
+    clear(intern_user["id"])
+
+    admin = new_page(browser)
+    log_in(admin, "SUPER_ADMIN")
+    lead = new_page(browser)
+    log_in(lead, "TEAM_LEAD")
+    intern = new_page(browser)
+    log_in(intern, "INTERN")
+    bodies = []
+
+    def record(request):
+        if request.method in ("POST", "PATCH") and "/users" in request.url and request.post_data:
+            bodies.append(json.loads(request.post_data))
+
+    admin.on("request", record)
+
+    def falls_back():
+        expect(lead.locator(".topbar .me")).to_contain_text("Team Lead")
+        call("PATCH", f"/users/{lead_user['id']}", admin_token, {"departmentId": creative["id"]})
+        lead.reload()
+        expect(lead.locator(".topbar .me")).to_contain_text("Creative")
+        expect(lead.locator(".topbar .me")).not_to_contain_text("Team Lead")
+        call(
+            "PATCH",
+            f"/users/{lead_user['id']}",
+            admin_token,
+            {"departmentId": creative["id"], "positionId": designer["id"]},
+        )
+        lead.reload()
+        expect(lead.locator(".topbar .me")).to_contain_text("Graphic Designer")
+        lead.locator(".topbar .me").click()
+        expect(lead.locator(".popover")).to_contain_text("Graphic Designer")
+        clear(lead_user["id"])
+    step("Display: position, then department, then access level", falls_back)
+
+    def prompt():
+        admin.goto(f"{APP}/")
+        banner = admin.get_by_role("status").filter(has_text="no department")
+        expect(banner).to_be_visible()
+        expect(lead.get_by_text("no department")).to_have_count(0)
+        lead.goto(f"{APP}/")
+        expect(lead.get_by_role("heading", level=1)).to_be_visible()
+        expect(lead.get_by_text("no department")).to_have_count(0)
+        banner.get_by_role("link", name="Assign them").click()
+        expect(admin).to_have_url(re.compile(r"/users\?department=none$"))
+        expect(admin.get_by_label("Department")).to_have_value("none")
+        expect(admin.get_by_role("row", name=re.compile(re.escape(lead_name)))).to_be_visible()
+        expect(admin.get_by_text("Pat Pending")).to_have_count(0)
+    step("Dashboard prompt: Super Admin only, opens the active people with no department", prompt)
+
+    def edit_placement():
+        admin.get_by_role("button", name=f"Edit {lead_name}").click()
+        dialog = admin.get_by_role("dialog")
+        expect(dialog.get_by_label("Access level")).to_be_visible()
+        expect(dialog.get_by_label("Position")).to_be_disabled()
+        dialog.get_by_label("Department").select_option(label="Creative")
+        options = dialog.get_by_label("Position").locator("option").all_inner_texts()
+        assert "Graphic Designer" in options and "Backend Developer" not in options, options
+        dialog.get_by_label("Position").select_option(label="Graphic Designer")
+        bodies.clear()
+        dialog.get_by_role("button", name="Save changes").click()
+        expect(dialog).to_have_count(0)
+        assert bodies == [{"departmentId": creative["id"], "positionId": designer["id"]}], bodies
+        expect(admin.get_by_role("row", name=re.compile(re.escape(lead_name)))).to_have_count(0)
+    step("Edit user: positions follow the department, both sent, row leaves the no-department list", edit_placement)
+
+    def move_department():
+        admin.get_by_label("Department").select_option(label="Creative")
+        row = admin.get_by_role("row", name=re.compile(re.escape(lead_name)))
+        expect(row.get_by_role("cell", name="Graphic Designer")).to_be_visible()
+        expect(admin.get_by_role("row", name=re.compile(re.escape(intern_name)))).to_have_count(0)
+        admin.get_by_role("button", name=f"Edit {lead_name}").click()
+        dialog = admin.get_by_role("dialog")
+        expect(dialog.get_by_label("Position")).to_have_value(designer["id"])
+        dialog.get_by_label("Department").select_option(label="Engineering")
+        expect(dialog.get_by_label("Position")).to_have_value("")
+        bodies.clear()
+        dialog.get_by_role("button", name="Save changes").click()
+        expect(dialog).to_have_count(0)
+        assert bodies == [{"departmentId": engineering["id"], "positionId": None}], bodies
+        admin.get_by_label("Department").select_option(label="Engineering")
+        row = admin.get_by_role("row", name=re.compile(re.escape(lead_name)))
+        expect(row.get_by_role("cell", name="Engineering")).to_be_visible()
+        expect(row.get_by_text("Team Lead", exact=True)).to_be_visible()
+    step("Moving department clears the position and sends both, so the API accepts it", move_department)
+
+    def invite_form():
+        admin.get_by_label("Department").select_option("")
+        admin.get_by_role("button", name="Invite user").click()
+        dialog = admin.get_by_role("dialog")
+        labels = dialog.locator("label").all_inner_texts()
+        order = [next(i for i, text in enumerate(labels) if text.startswith(name)) for name in
+                 ("Full name", "Work email", "Department", "Position", "Access level")]
+        assert order == sorted(order), labels
+        dialog.get_by_label("Full name").fill(invited)
+        dialog.get_by_label("Work email").fill(invited_email)
+        dialog.get_by_label("Department").select_option(label="Creative")
+        dialog.get_by_label("Position").select_option(label="Graphic Designer")
+        dialog.get_by_label("Access level").select_option("INTERN")
+        bodies.clear()
+        dialog.get_by_role("button", name="Send invite").click()
+        expect(dialog.get_by_text(f"Invite sent to {invited_email}")).to_be_visible()
+        assert bodies[0]["departmentId"] == creative["id"] and bodies[0]["positionId"] == designer["id"], bodies
+        dialog.get_by_role("button", name="Done").click()
+    step("Invite form: name, email, department, position, access level, sent together", invite_form)
+
+    def everywhere():
+        call(
+            "PATCH",
+            f"/users/{intern_user['id']}",
+            admin_token,
+            {"departmentId": creative["id"], "positionId": designer["id"]},
+        )
+        title = f"{PREFIX} placed task"
+        task = call("POST", "/tasks", lead_token, {"title": title, "assigneeId": intern_user["id"]})["task"]
+        assert task["assignee"]["position"]["name"] == "Graphic Designer", task["assignee"]
+
+        lead.goto(f"{APP}/tasks?view=team")
+        lead.goto(f"{APP}/tasks/{task['id']}")
+        expect(lead.get_by_text(f"{intern_name} · Graphic Designer")).to_be_visible()
+
+        lead.goto(f"{APP}/tasks")
+        lead.get_by_role("button", name="New task").click()
+        dialog = lead.get_by_role("dialog")
+        dialog.get_by_role("combobox", name="Assignee").click()
+        dialog.get_by_role("combobox", name="Assignee").fill(intern_name.split()[0])
+        option = dialog.get_by_role("option", name=re.compile(re.escape(intern_name)))
+        expect(option.locator("span").nth(1)).to_have_text("Graphic Designer")
+        dialog.get_by_role("button", name="Cancel").click()
+
+        call("PUT", "/checkins/today", call("POST", "/auth/login", body=intern_login)["token"],
+             {"workCompleted": "Finished.", "priorities": "Today's plan.", "blockers": "", "taskIds": []})
+        lead.goto(f"{APP}/daily?tab=team")
+        expect(lead.locator("main").get_by_text("Graphic Designer").first).to_be_visible()
+
+        project = call("POST", "/projects", lead_token, {
+            "name": f"{PREFIX} placed project", "memberIds": [intern_user["id"]],
+        })["project"]
+        lead.goto(f"{APP}/projects/{project['id']}")
+        expect(lead.get_by_role("listitem").filter(has_text=intern_name).filter(has_text="Graphic Designer").first).to_be_visible()
+
+        today = datetime.now(timezone(timedelta(hours=1))).strftime("%Y-%m-%d")
+        meeting = call("POST", "/meetings", lead_token, {
+            "title": f"{PREFIX} placed meeting",
+            "startsAt": f"{today}T22:00:00+01:00",
+            "endsAt": f"{today}T22:30:00+01:00",
+            "attendeeIds": [intern_user["id"]],
+        })["meeting"]
+        lead.goto(f"{APP}/calendar?meeting={meeting['id']}")
+        panel = lead.get_by_role("dialog")
+        expect(panel.get_by_role("listitem").filter(has_text=intern_name)).to_contain_text("Graphic Designer")
+    step("Task, assignee picker, check-ins, project members and attendees show the position", everywhere)
+
+    def directory():
+        intern.goto(f"{APP}/directory")
+        group = intern.get_by_role("region", name="Creative", exact=True)
+        expect(group.get_by_text(intern_name)).to_be_visible()
+        expect(group.get_by_text("Graphic Designer")).to_be_visible()
+        expect(intern.get_by_role("region", name="No department")).to_be_visible()
+        intern.get_by_label("Department", exact=True).select_option(label="Engineering")
+        expect(intern.locator("main").get_by_text(lead_name)).to_be_visible()
+        expect(intern.locator("main").get_by_text(intern_name)).to_have_count(0)
+        expect(intern.get_by_role("region", name="Creative", exact=True)).to_have_count(0)
+    step("Directory: grouped by department, filters, position under each name", directory)
+
+    def settings():
+        intern.goto(f"{APP}/settings")
+        details = intern.locator("dl")
+        expect(details.get_by_text("Department")).to_be_visible()
+        expect(details.get_by_text("Creative")).to_be_visible()
+        expect(details.get_by_text("Graphic Designer")).to_be_visible()
+        expect(details.get_by_text("Access level")).to_be_visible()
+        expect(details.get_by_text("Intern", exact=True)).to_be_visible()
+        expect(intern.locator("main select")).to_have_count(0)
+    step("Settings: department and position are read only, Role reads Access level", settings)
+
+    def only_super_admin():
+        expect(admin.get_by_role("link", name="Departments", exact=True)).to_be_visible()
+        expect(lead.get_by_role("link", name="Departments", exact=True)).to_have_count(0)
+        lead.goto(f"{APP}/departments")
+        expect(lead.get_by_role("heading", name="Departments")).to_have_count(0)
+        try:
+            call("GET", "/departments?includeArchived=true", lead_token)
+            raise AssertionError("The server should refuse archived departments to a Team Lead")
+        except urllib.error.HTTPError as error:
+            assert error.code == 403, error.code
+    step("Departments page: Super Admin only, and the server agrees", only_super_admin)
+
+    panel = admin.get_by_role("dialog")
+
+    def add_department():
+        open_nav_link(admin, "Departments")
+        admin.get_by_role("button", name="Add department").click()
+        panel.get_by_role("button", name="Add department").click()
+        expect(panel.get_by_text("Enter a department name.")).to_be_visible()
+        panel.get_by_label("Name").fill("creative")
+        panel.get_by_role("button", name="Add department").click()
+        expect(panel.get_by_text(re.compile("already exists"))).to_be_visible()
+        panel.get_by_label("Name").fill(department_name)
+        panel.get_by_label("Description").fill("Motion work.")
+        panel.get_by_role("button", name="Add department").click()
+        expect(panel.get_by_label("New position")).to_be_visible()
+        panel.get_by_label("New position").fill(position_name)
+        panel.get_by_role("button", name="Add", exact=True).click()
+        expect(panel.get_by_text(position_name)).to_be_visible()
+        panel.get_by_label("New position").fill(position_name.lower())
+        panel.get_by_role("button", name="Add", exact=True).click()
+        expect(panel.get_by_text(re.compile("already has a position"))).to_be_visible()
+        panel.get_by_label("New position").fill("")
+    step("Departments: add, name taken on the field, then add a position, case-only duplicate refused", add_department)
+
+    def set_lead():
+        picker = panel.get_by_role("combobox", name="Lead")
+        picker.click()
+        picker.fill(lead_name.split()[0])
+        panel.get_by_role("option", name=re.compile(re.escape(lead_name))).click()
+        panel.get_by_role("button", name="Save changes").click()
+        expect(panel).to_have_count(0)
+        card = admin.get_by_role("listitem").filter(has=admin.get_by_role("heading", name=department_name))
+        expect(card).to_contain_text(lead_name)
+        expect(card).to_contain_text("0 members")
+        expect(card).to_contain_text("1 position")
+    step("Departments: set the lead, card shows lead and counts", set_lead)
+
+    def member_count():
+        department = next(
+            d for d in call("GET", "/departments", admin_token)["departments"] if d["name"] == department_name
+        )
+        position = department["positions"][0]
+        call("PATCH", f"/users/{intern_user['id']}", admin_token,
+             {"departmentId": department["id"], "positionId": position["id"]})
+        admin.reload()
+        card = admin.get_by_role("listitem").filter(has=admin.get_by_role("heading", name=department_name))
+        expect(card).to_contain_text("1 member")
+    step("Departments: member count follows the people in it", member_count)
+
+    def archive_position():
+        admin.get_by_role("button", name=f"Edit {department_name}").click()
+        panel.get_by_role("button", name=f"Archive {position_name}").click()
+        confirm = admin.get_by_role("dialog", name="Archive position?")
+        expect(confirm).to_contain_text("1 person on it will keep it")
+        confirm.get_by_role("button", name="Archive").click()
+        expect(panel.get_by_role("button", name=f"Restore {position_name}")).to_be_visible()
+        panel.get_by_role("button", name="Close", exact=True).first.click()
+        expect(panel).to_have_count(0)
+
+        admin.goto(f"{APP}/users")
+        admin.get_by_role("button", name=f"Edit {intern_name}").click()
+        dialog = admin.get_by_role("dialog")
+        select = dialog.get_by_label("Position")
+        expect(select.locator("option:checked")).to_have_text(f"{position_name} (archived)")
+        dialog.get_by_label("Full name").fill(f"{intern_name}x")
+        bodies.clear()
+        dialog.get_by_role("button", name="Save changes").click()
+        expect(dialog).to_have_count(0)
+        assert bodies == [{"name": f"{intern_name}x"}], bodies
+        call("PATCH", f"/users/{intern_user['id']}", admin_token, {"name": intern_name})
+
+        admin.reload()
+        admin.get_by_role("button", name="Invite user").click()
+        dialog = admin.get_by_role("dialog")
+        dialog.get_by_label("Department").select_option(label=department_name)
+        expect(dialog.get_by_label("Position").locator("option")).to_have_text(["No position"])
+        dialog.get_by_role("button", name="Cancel").click()
+    step("Archived position: holder keeps it and still saves, nobody new can pick it", archive_position)
+
+    def replaced_lead():
+        call("POST", "/users", admin_token, {"name": stand_in, "email": stand_in_email, "role": "TEAM_MEMBER"})
+        token = re.search(r"token=(\S+)", emailed_link(stand_in_email, "/set-password")).group(1)
+        call("POST", "/auth/set-password", body={"token": token, "newPassword": PASSWORD})
+        users = call("GET", "/users?limit=100", admin_token)["users"]
+        person = next(user for user in users if user["email"] == stand_in_email)
+        department = next(
+            d for d in call("GET", "/departments", admin_token)["departments"] if d["name"] == department_name
+        )
+        call("PATCH", f"/departments/{department['id']}", admin_token, {"leadId": person["id"]})
+        call("POST", f"/users/{person['id']}/deactivate", admin_token)
+        admin.goto(f"{APP}/departments")
+        card = admin.get_by_role("listitem").filter(has=admin.get_by_role("heading", name=department_name))
+        expect(card).to_contain_text(f"{stand_in} has been deactivated. Choose a new lead.")
+    step("Departments: a deactivated lead raises a warning", replaced_lead)
+
+    def archive_department():
+        admin.get_by_role("button", name=f"Edit {department_name}").click()
+        panel.get_by_role("button", name="Archive department").click()
+        confirm = admin.get_by_role("dialog", name="Archive department?")
+        confirm.get_by_role("button", name="Archive").click()
+        expect(admin.get_by_role("heading", name=department_name)).to_have_count(0)
+        admin.get_by_role("switch", name="Show archived").click()
+        expect(admin.get_by_role("heading", name=department_name)).to_be_visible()
+        admin.goto(f"{APP}/users")
+        admin.get_by_role("button", name=f"Edit {intern_name}").click()
+        dialog = admin.get_by_role("dialog")
+        expect(dialog.get_by_label("Department").locator("option:checked")).to_have_text(f"{department_name} (archived)")
+        dialog.get_by_role("button", name="Cancel").click()
+    step("Archived department: leaves the list, can be shown, holder keeps it", archive_department)
+
+    def restore_department():
+        admin.goto(f"{APP}/departments")
+        admin.get_by_role("switch", name="Show archived").click()
+        admin.get_by_role("button", name=f"Edit {department_name}").click()
+        panel.get_by_role("button", name="Restore department").click()
+        expect(panel.get_by_role("button", name="Archive department")).to_be_visible()
+        panel.get_by_role("button", name=f"Restore {position_name}").click()
+        expect(panel.get_by_role("button", name=f"Archive {position_name}")).to_be_visible()
+    step("Departments: restore a department and a position", restore_department)
+
+    def phones():
+        phone = new_page(browser, MOBILE)
+        log_in(phone, "SUPER_ADMIN")
+        for path, heading in (("/departments", "Departments"), ("/users", "User Management"), ("/directory", "Team Directory")):
+            phone.goto(f"{APP}{path}")
+            expect(phone.get_by_role("heading", name=heading, level=1)).to_be_visible()
+            expect_no_sideways_scroll(phone, path)
+        phone.goto(f"{APP}/departments")
+        phone.get_by_role("button", name=re.compile("^Edit ")).first.click()
+        expect(phone.get_by_role("dialog").get_by_label("New position")).to_be_visible()
+        expect_no_sideways_scroll(phone, "department panel")
+    step("Departments, users and directory fit 375px", phones)
+
+    # Later checks and the next run start from people with no placement.
+    department = next(
+        d for d in call("GET", "/departments?includeArchived=true", admin_token)["departments"]
+        if d["name"] == department_name
+    )
+    clear(lead_user["id"])
+    clear(intern_user["id"])
+    call("PATCH", f"/departments/{department['id']}", admin_token, {"leadId": None, "isArchived": True})
 
 
 def run_meetings(browser, admin_token):

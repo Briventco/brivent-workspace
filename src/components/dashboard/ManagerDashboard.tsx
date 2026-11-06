@@ -1,12 +1,16 @@
 import React, { useMemo } from 'react';
 import { getTeamCheckins } from '../../api/checkins';
 import { listOpenTasks } from '../../api/tasks';
-import { Task, TaskSummary } from '../../api/types';
+import { PersonRef, Task, TaskSummary, User } from '../../api/types';
+import { listUsersWithoutDepartment } from '../../api/users';
+import { useSession } from '../../context/AuthContext';
+import { nameAndTitle, personTitle } from '../../lib/people';
 import { Link } from '../../lib/router';
 import { ApiQuery, useApiQuery } from '../../lib/useApiQuery';
 import { isWeekend } from '../../lib/wat';
 import { AsyncState } from '../ui/AsyncState';
 import { Avatar } from '../ui/Avatar';
+import { Banner } from '../ui/Banner';
 import { PriorityBadge, StatusBadge } from '../ui/badges';
 import { Card, CardHeader, StatCard } from '../ui/Card';
 import { Table } from '../ui/Table';
@@ -77,7 +81,12 @@ const OverdueCard: React.FC<{ query: ApiQuery<Task[]> }> = ({ query }) => {
                           {task.assignee ? (
                             <span className="flex items-center gap-2">
                               <Avatar name={task.assignee.name} id={task.assignee.id} size="sm" />
-                              {task.assignee.name}
+                              <span className="min-w-0">
+                                {task.assignee.name}
+                                <span className="block text-small text-text-2">
+                                  {personTitle(task.assignee)}
+                                </span>
+                              </span>
                             </span>
                           ) : (
                             <span className="text-text-3">Unassigned</span>
@@ -105,9 +114,7 @@ const OverdueCard: React.FC<{ query: ApiQuery<Task[]> }> = ({ query }) => {
   );
 };
 
-interface Workload {
-  id: string;
-  name: string;
+interface Workload extends PersonRef {
   open: number;
   overdue: number;
 }
@@ -148,7 +155,12 @@ const WorkloadCard: React.FC<{ query: ApiQuery<Task[]> }> = ({ query }) => {
                   to={`${TASKS}&preset=open&assignee=${person.id}&name=${encodeURIComponent(person.name)}`}
                   className="grid grid-cols-[minmax(0,1fr)_72px_24px] items-center gap-3 text-text hover:no-underline"
                 >
-                  <span className="truncate">{person.name}</span>
+                  <span className="truncate" title={nameAndTitle(person)}>
+                    {person.name}
+                    <span className="block text-small text-text-2 truncate">
+                      {personTitle(person)}
+                    </span>
+                  </span>
                   <span className="workload" aria-hidden="true">
                     <i className="w-over" style={{ width: `${(person.overdue / busiest) * 100}%` }} />
                     <i
@@ -194,6 +206,30 @@ const OwnTasksCard: React.FC = () => {
         )}
       </AsyncState>
     </Card>
+  );
+};
+
+/** Everyone starts without a department, so this shows until they've all been placed. */
+const MissingDepartmentsPrompt: React.FC = () => {
+  const { can } = useSession();
+  const canPlace = can('manageDepartments') && can('viewUsers');
+  const query = useApiQuery<User[]>(
+    (signal) => (canPlace ? listUsersWithoutDepartment(signal) : Promise.resolve([])),
+    [canPlace],
+  );
+
+  const count = query.data?.length ?? 0;
+  if (count === 0) return null;
+
+  return (
+    <div className="mb-5">
+      <Banner tone="info">
+        {count === 1 ? '1 active person has' : `${count} active people have`} no department.{' '}
+        <Link to="/users?department=none" className="font-semibold">
+          Assign them
+        </Link>
+      </Banner>
+    </div>
   );
 };
 
@@ -305,6 +341,8 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ summary, onC
         {facts[1]}
         {showMissing && <> and {facts[2]} still to check in</>}.
       </DashboardGreeting>
+
+      <MissingDepartmentsPrompt />
 
       {stats}
 

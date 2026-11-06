@@ -31,6 +31,7 @@ const ACTIONS = {
   assignSuperAdmin: 'users.assign_super_admin',
   resetUserPassword: 'users.reset_password',
   resendInvite: 'users.resend_invite',
+  manageDepartments: 'departments.manage',
 } as const;
 
 export type Action = keyof typeof ACTIONS;
