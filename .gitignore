@@ -58,3 +58,6 @@ vite.config.js
 .env
 .env.*
 !.env.example
+
+# Design handoff PDFs stay on your machine
+docs/design/*.pdf

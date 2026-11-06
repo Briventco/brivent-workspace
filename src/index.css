@@ -1,16 +1,174 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+/* brivent.css is the design's own file, unedited. Anything it doesn't cover goes below. */
+@import 'tailwindcss/base';
+@import './assets/brivent/tokens/brivent.css';
+@import 'tailwindcss/components';
+@import 'tailwindcss/utilities';
 
-@layer base {
-  body {
-    @apply bg-slate-50 text-slate-900 font-sans antialiased min-h-screen selection:bg-brivent-600 selection:text-white;
-  }
+/* Icons are inline SVGs rather than the icon font, so sizes come from the same .ms classes. */
+.ms svg {
+  display: block;
+  width: 1em;
+  height: 1em;
+}
 
-  /* One focus ring for every interactive element, keyboard users only. */
-  :focus-visible {
-    @apply outline outline-2 outline-offset-2 outline-brivent-600;
+/* Focus moved here by code (a new page, an opened dialog) doesn't need a ring. */
+[tabindex='-1']:focus-visible {
+  box-shadow: none;
+}
+
+.input-wrap.no-lead .input {
+  padding-left: 12px;
+}
+
+.input-wrap .input.has-trail {
+  padding-right: 40px;
+}
+
+.input-wrap .trail .ms {
+  position: static;
+  color: inherit;
+}
+
+.select.is-error,
+.textarea.is-error {
+  border-color: var(--danger);
+  box-shadow: 0 0 0 3px rgba(180, 35, 24, 0.12);
+}
+
+.input:disabled,
+.input:read-only,
+.select:disabled,
+.textarea:disabled {
+  background: var(--surface-2);
+  color: var(--text-3);
+}
+
+.btn-danger:hover {
+  background: #912018;
+}
+
+.btn:focus-visible,
+.tab:focus-visible,
+.chip:focus-visible {
+  outline: none;
+  box-shadow: var(--focus);
+}
+
+/* Every tap target on a phone is 44px. */
+@media (max-width: 767px) {
+  .btn,
+  .btn-sm {
+    height: 44px;
   }
+  .btn-icon,
+  .btn-icon.btn-sm {
+    width: 44px;
+  }
+  .content {
+    padding: 20px 16px 48px;
+  }
+}
+
+.table-sticky th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.table tbody tr {
+  height: 56px;
+}
+
+.table tr.row-link {
+  cursor: pointer;
+}
+
+.switch:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.switch::after {
+  transition: left 120ms ease;
+}
+
+.chip:hover {
+  background: var(--surface-2);
+}
+
+.chip.on:hover {
+  background: var(--brand-50);
+}
+
+.modal-scrim,
+.panel-scrim {
+  position: fixed;
+  inset: 0;
+}
+
+.side-panel {
+  position: fixed;
+  top: 64px;
+  right: 0;
+  bottom: 0;
+  width: 480px;
+  max-width: 100%;
+  z-index: 40;
+}
+
+/* On a phone, modals and side panels open full screen. */
+@media (max-width: 767px) {
+  .modal.modal-full {
+    position: fixed;
+    inset: 0;
+    max-width: none;
+    max-height: none;
+    border: 0;
+    border-radius: 0;
+  }
+  .side-panel {
+    top: 0;
+    width: 100%;
+  }
+}
+
+.spin {
+  animation: spin 900ms linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.sk {
+  background-size: 200% 100%;
+  animation: shimmer 1400ms ease-in-out infinite;
+}
+
+@keyframes shimmer {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: -100% 0;
+  }
+}
+
+.toast-stack {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: calc(100vw - 32px);
+}
+
+.toast {
+  max-width: 100%;
 }
 
 ::-webkit-scrollbar {
@@ -23,12 +181,12 @@
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #cbd5e1;
-  border-radius: 9999px;
+  background: var(--border-strong);
+  border-radius: 999px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #94a3b8;
+  background: var(--text-3);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -36,6 +194,10 @@
   *::before,
   *::after {
     animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+  }
+  .sk {
+    animation: none;
   }
 }
