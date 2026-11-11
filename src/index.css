@@ -554,6 +554,358 @@ button.reply-quote:hover {
   transition: none;
 }
 
+/* Photos in a message: one at its own shape, or a tidy grid with "+N" on the fourth. */
+.photo-single {
+  width: min(320px, 100%);
+  max-height: 360px;
+  margin: 4px 0;
+}
+
+.photo-grid {
+  display: grid;
+  gap: 2px;
+  width: min(360px, 100%);
+  margin: 4px 0;
+  border-radius: var(--r-md);
+  overflow: hidden;
+}
+
+.photo-grid-2 {
+  grid-template-columns: 1fr 1fr;
+  aspect-ratio: 2 / 1;
+}
+
+.photo-grid-3 {
+  grid-template-columns: 2fr 1fr;
+  grid-template-rows: 1fr 1fr;
+  aspect-ratio: 3 / 2;
+}
+
+.photo-grid-3 > :first-child {
+  grid-row: span 2;
+}
+
+.photo-grid-4 {
+  grid-template-columns: 1fr 1fr;
+  aspect-ratio: 1;
+}
+
+.photo-tile {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  background: var(--surface-2);
+  cursor: zoom-in;
+  overflow: hidden;
+}
+
+.photo-single .photo-tile {
+  border-radius: var(--r-md);
+}
+
+.photo-tile img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.photo-more {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(3, 3, 45, 0.55);
+  color: #fff;
+  font-size: 22px;
+  font-weight: 700;
+}
+
+.photo-viewer {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(3, 3, 20, 0.94);
+  color: #fff;
+}
+
+.photo-viewer-bar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+}
+
+.photo-viewer-image {
+  max-width: calc(100vw - 32px);
+  max-height: calc(100dvh - 120px);
+  width: auto;
+  height: auto;
+  object-fit: contain;
+}
+
+.photo-viewer .photo-viewer-button {
+  color: #fff;
+}
+
+.photo-viewer .photo-viewer-button:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+/* Centred without a transform, so the pressed nudge can't move them out from under a click. */
+.photo-viewer-prev,
+.photo-viewer-next {
+  position: absolute;
+  top: calc(50% - 22px);
+}
+
+.photo-viewer-prev {
+  left: 12px;
+}
+
+.photo-viewer-next {
+  right: 12px;
+}
+
+/* Photos waiting in the composer */
+.tray {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.tray-photo {
+  position: relative;
+  width: 64px;
+  height: 64px;
+  border-radius: var(--r-md);
+  overflow: hidden;
+  background: var(--surface-2);
+  box-shadow: inset 0 0 0 1px var(--border);
+}
+
+.tray-photo img,
+.tray-photo-icon {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-3);
+}
+
+.tray-photo.is-failed {
+  box-shadow: inset 0 0 0 2px var(--danger);
+}
+
+.tray-progress {
+  position: absolute;
+  left: 6px;
+  right: 6px;
+  bottom: 6px;
+  height: 4px;
+  border-radius: var(--r-full);
+  background: rgba(255, 255, 255, 0.7);
+  overflow: hidden;
+}
+
+.tray-progress i {
+  display: block;
+  height: 100%;
+  background: var(--brand);
+  transition: width 120ms linear;
+}
+
+.tray-retry {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  border: 0;
+  background: rgba(253, 236, 234, 0.92);
+  color: var(--danger);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.tray-photo .tray-remove {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 22px;
+  height: 22px;
+  min-height: 0;
+  padding: 0;
+  border-radius: var(--r-full);
+  background: rgba(3, 3, 45, 0.6);
+  color: #fff;
+}
+
+.drop-overlay {
+  position: absolute;
+  inset: 8px;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 2px dashed var(--brand);
+  border-radius: var(--r-lg);
+  background: rgba(238, 240, 255, 0.92);
+  color: var(--brand);
+  font-weight: 600;
+  pointer-events: none;
+}
+
+/* Voice notes */
+.voice-player {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: min(340px, 100%);
+  margin: 4px 0;
+  padding: 6px 10px 6px 6px;
+  border-radius: var(--r-full);
+  background: var(--surface-2);
+  box-shadow: inset 0 0 0 1px var(--border);
+}
+
+.voice-play {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: 0;
+  border-radius: var(--r-full);
+  background: var(--brand);
+  color: var(--on-brand);
+  cursor: pointer;
+}
+
+.voice-wave {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 2px;
+  height: 28px;
+  min-width: 0;
+  cursor: pointer;
+  touch-action: none;
+}
+
+.voice-wave i {
+  flex: 1;
+  min-width: 2px;
+  border-radius: 2px;
+  background: var(--border-strong);
+}
+
+.voice-wave i.is-played {
+  background: var(--brand);
+}
+
+.voice-time {
+  font-size: 12px;
+  color: var(--text-2);
+}
+
+.voice-speed {
+  min-width: 34px;
+  padding: 2px 6px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-full);
+  background: var(--surface);
+  color: var(--text-2);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.voice-recorder {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.voice-recorder.is-active {
+  flex: 1;
+}
+
+/* The browser mustn't take a hold over as a scroll, or the finger is lost mid-recording. */
+.voice-mic {
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.voice-mic.is-holding {
+  background: var(--danger-bg);
+  color: var(--danger);
+}
+
+.voice-error {
+  max-width: 18rem;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--danger);
+}
+
+.voice-preview {
+  height: 32px;
+}
+
+.recording-dot {
+  width: 10px;
+  height: 10px;
+  flex: none;
+  border-radius: var(--r-full);
+  background: var(--danger);
+  animation: recording-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes recording-pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+
+.voice-level {
+  flex: 1;
+  height: 6px;
+  min-width: 40px;
+  border-radius: var(--r-full);
+  background: var(--surface-2);
+  overflow: hidden;
+}
+
+.voice-level i {
+  display: block;
+  height: 100%;
+  background: var(--success);
+  transform-origin: left;
+  transition: transform 80ms linear;
+}
+
 .msg-link {
   display: inline;
   color: var(--brand);

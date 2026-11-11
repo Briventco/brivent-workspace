@@ -247,12 +247,33 @@ export interface ReplyQuote {
   deletedAt: string | null;
 }
 
+export interface Attachment {
+  id: string;
+  kind: AttachmentKind;
+  /** Signed, and good for an hour. Messages carry fresh ones each time they're read. */
+  url: string;
+  /** 480px, for the chat. Null on a voice note. */
+  thumbnailUrl: string | null;
+  mimeType: string;
+  sizeBytes: number;
+  width: number | null;
+  height: number | null;
+  /** Voice notes only. */
+  durationSeconds: number | null;
+  /** Voice notes only: 48 levels from 0 to 1. */
+  waveform: number[] | null;
+}
+
+export const MAX_PHOTOS = 10;
+
 export interface Message {
   id: string;
   conversationId: string;
   clientId: string;
   author: ConversationPerson;
   replyTo: ReplyQuote | null;
+  /** Up to 10 photos, or one voice note. Empty when there are none, or once deleted. */
+  attachments: Attachment[];
   /** Null once deleted. */
   body: string | null;
   mentions: Named[];

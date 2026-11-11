@@ -11,7 +11,8 @@ import { io } from 'socket.io-client';
 import { getMe } from '../api/auth';
 import { API_ORIGIN, getToken } from '../api/client';
 import { getTaskSummary } from '../api/tasks';
-import { Conversation, Message, ReplyQuote } from '../api/types';
+import { Attachment, Conversation, Message, ReplyQuote } from '../api/types';
+import { Recording } from '../lib/useVoiceRecorder';
 import { Draft } from '../lib/messages';
 
 const POLL_MS = 15_000;
@@ -38,6 +39,13 @@ export interface PendingMessage {
   body: string;
   /** What it replies to, sent as replyToId and shown while it's on its way. */
   replyTo: ReplyQuote | null;
+  /** Photos already uploaded, sent as attachmentIds. */
+  attachments: Attachment[];
+  /**
+   * A recording still to upload. The backend converts it before answering, so this is where
+   * "Processing" comes from. Once uploaded it's kept, and a retry only resends the message.
+   */
+  voice: { recording: Recording; uploaded: Attachment | null } | null;
   /** Set when sending failed: what went wrong, in words for the person. */
   error: string | null;
 }
