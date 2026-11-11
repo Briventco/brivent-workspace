@@ -12,6 +12,7 @@ import * as authApi from '../api/auth';
 import { ApiError, clearToken, getToken, setUnauthorizedHandler } from '../api/client';
 import { Session } from '../api/types';
 import { Action, can } from '../lib/permissions';
+import { clearQueryCache } from '../lib/useApiQuery';
 import { navigate } from '../lib/router';
 import { useToast } from './ToastContext';
 
@@ -44,6 +45,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const toastRef = useRef(toast);
   toastRef.current = toast;
+
+  // Cached pages belong to whoever was signed in. Anyone else starts from nothing.
+  const signedInId = state.status === 'authenticated' ? state.session.user.id : null;
+  const cachedFor = useRef(signedInId);
+  if (cachedFor.current !== signedInId) {
+    clearQueryCache();
+    cachedFor.current = signedInId;
+  }
 
   useEffect(() => {
     setUnauthorizedHandler(() => {

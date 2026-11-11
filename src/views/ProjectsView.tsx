@@ -73,7 +73,7 @@ export const ProjectsView: React.FC = () => {
   const [search, setSearch] = useState('');
   const [isCreating, setIsCreating] = useState(false);
 
-  const query = useApiQuery((signal) => listAllProjects(signal), []);
+  const query = useApiQuery((signal) => listAllProjects(signal), [], 'projects');
   const projects = query.data ?? [];
   const term = search.trim().toLowerCase();
   const shown = projects.filter(

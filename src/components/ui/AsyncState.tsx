@@ -53,6 +53,8 @@ interface AsyncStateProps<T> {
   errorTitle?: string;
   isEmpty?: (data: T) => boolean;
   empty?: React.ReactNode;
+  /** A skeleton shaped like the content, for when the default list rows would be the wrong size. */
+  loading?: React.ReactNode;
   children: (data: T) => React.ReactNode;
 }
 
@@ -63,13 +65,14 @@ export function AsyncState<T>({
   errorTitle,
   isEmpty,
   empty,
+  loading,
   children,
 }: AsyncStateProps<T>) {
   const { data, error, reload } = query;
 
   if (error instanceof ApiError && error.isForbidden) return <NoAccess />;
   if (error) return <ErrorState title={errorTitle} message={errorMessage(error)} onRetry={reload} />;
-  if (data === undefined) return <LoadingState label={loadingLabel} />;
+  if (data === undefined) return <>{loading ?? <LoadingState label={loadingLabel} />}</>;
   if (isEmpty?.(data)) return <>{empty}</>;
   return <>{children(data)}</>;
 }

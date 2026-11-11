@@ -15,7 +15,8 @@ import { PriorityBadge, StatusBadge } from '../ui/badges';
 import { Card, CardHeader, StatCard } from '../ui/Card';
 import { Table } from '../ui/Table';
 import { DashboardGreeting } from './DashboardGreeting';
-import { MeetingsCard } from './MeetingsCard';
+import { DashboardSkeleton } from './DashboardSkeleton';
+import { MeetingsCard, useTodaysMeetings } from './MeetingsCard';
 import { BlockersCard, NotCheckedInCard } from './TeamCheckinCards';
 import { daysLate, TaskRow } from './TaskRow';
 import { LearningCard } from './LearningCard';
@@ -171,8 +172,7 @@ const WorkloadCard: React.FC<{ query: ApiQuery<Task[]> }> = ({ query }) => {
   );
 };
 
-const OwnTasksCard: React.FC = () => {
-  const query = useApiQuery((signal) => listOpenTasks('mine', {}, signal), []);
+const OwnTasksCard: React.FC<{ query: ApiQuery<Task[]> }> = ({ query }) => {
   const tasks = sortByDeadline(query.data ?? []).slice(0, 4);
 
   return (
@@ -192,7 +192,7 @@ const OwnTasksCard: React.FC = () => {
         {() => (
           <ul className="divide-y divide-border compact-rows">
             {tasks.map((task) => (
-              <TaskRow key={task.id} task={task} />
+              <TaskRow key={task.id} task={task} stacked />
             ))}
           </ul>
         )}
@@ -202,13 +202,15 @@ const OwnTasksCard: React.FC = () => {
 };
 
 /** Everyone starts without a department, so this shows until they've all been placed. */
-const MissingDepartmentsPrompt: React.FC = () => {
-  const { can } = useSession();
-  const canPlace = can('manageDepartments') && can('viewUsers');
-  const query = useApiQuery<User[]>(
+function useMissingDepartments(canPlace: boolean) {
+  return useApiQuery<User[]>(
     (signal) => (canPlace ? listUsersWithoutDepartment(signal) : Promise.resolve([])),
     [canPlace],
+    'users:no-department',
   );
+}
+
+const MissingDepartmentsPrompt: React.FC<{ query: ApiQuery<User[]> }> = ({ query }) => {
 
   const count = query.data?.length ?? 0;
   if (count === 0) return null;
@@ -233,9 +235,15 @@ interface ManagerDashboardProps {
 }
 
 export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ summary, onChanged }) => {
-  const openTasks = useApiQuery((signal) => listOpenTasks('all', {}, signal), []);
+  const { can } = useSession();
+  const openTasks = useApiQuery((signal) => listOpenTasks('all', {}, signal), [], 'tasks:open:all');
+  const ownTasks = useApiQuery((signal) => listOpenTasks('mine', {}, signal), [], 'tasks:open:mine');
   const { teamCheckins, upcomingMeetings } = summary;
   const hasCheckins = teamCheckins !== undefined;
+  const meetings = useTodaysMeetings(upcomingMeetings !== undefined);
+  const missingDepartments = useMissingDepartments(
+    can('manageDepartments') && can('viewUsers'),
+  );
 
   const checkins = useApiQuery(
     (signal) =>
@@ -243,6 +251,13 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ summary, onC
         ? getTeamCheckins({ blockersOnly: true }, signal)
         : Promise.resolve({ checkins: [], notCheckedIn: [] }),
     [hasCheckins],
+    'checkins:team:blockers',
+  );
+
+  // One paint, once every card has its answer, so nothing below moves as each one lands.
+  // A card that fails shows its own error, so a failure counts as an answer here.
+  const isSettling = [openTasks, ownTasks, checkins, meetings, missingDepartments].some(
+    (query) => query.data === undefined && !query.error,
   );
 
   const blocked = openTasks.data?.filter((task) => task.status === 'BLOCKED').length;
@@ -325,6 +340,15 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ summary, onC
     </div>
   );
 
+  if (isSettling) {
+    return (
+      <>
+        <DashboardGreeting />
+        <DashboardSkeleton stats={hasCheckins ? 5 : 4} />
+      </>
+    );
+  }
+
   return (
     <>
       <DashboardGreeting>
@@ -334,7 +358,7 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ summary, onC
         {showMissing && <> and {facts[2]} still to check in</>}.
       </DashboardGreeting>
 
-      <MissingDepartmentsPrompt />
+      <MissingDepartmentsPrompt query={missingDepartments} />
 
       <UnreadMessagesLink summary={summary} />
       <LearningCard summary={summary} />
@@ -367,14 +391,14 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ summary, onC
           )}
           {upcomingMeetings !== undefined && (
             <div className="order-4 min-w-0">
-              <MeetingsCard />
+              <MeetingsCard query={meetings} />
             </div>
           )}
           <div className="order-5 min-w-0">
             <WorkloadCard query={openTasks} />
           </div>
           <div className="order-6 min-w-0">
-            <OwnTasksCard />
+            <OwnTasksCard query={ownTasks} />
           </div>
         </div>
       </div>

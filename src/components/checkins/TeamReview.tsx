@@ -339,7 +339,7 @@ export const TeamReview: React.FC = () => {
   const today = watDate();
   const [date, setDate] = useState(today);
   const [filter, setFilter] = useState<Filter>('all');
-  const query = useApiQuery((signal) => getTeamCheckins({ date }, signal), [date]);
+  const query = useApiQuery((signal) => getTeamCheckins({ date }, signal), [date], 'checkins:team');
 
   const shift = (days: number) => setDate(watDate(addDays(watDayStart(date), days)));
   const { data, error } = query;

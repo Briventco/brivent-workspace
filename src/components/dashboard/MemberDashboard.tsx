@@ -9,7 +9,8 @@ import { Card, CardHeader, StatCard } from '../ui/Card';
 import { EmptyState } from '../ui/EmptyState';
 import { CheckInCard } from './CheckInCard';
 import { DashboardGreeting } from './DashboardGreeting';
-import { MeetingsCard } from './MeetingsCard';
+import { DashboardSkeleton } from './DashboardSkeleton';
+import { MeetingsCard, useTodaysMeetings } from './MeetingsCard';
 import { isDueToday, TaskRow } from './TaskRow';
 import { LearningCard } from './LearningCard';
 import { UnreadMessagesLink } from './UnreadMessagesLink';
@@ -79,7 +80,7 @@ const Sentence: React.FC<{ overdue: number; dueToday: number }> = ({ overdue, du
 };
 
 export const MemberDashboard: React.FC<{ summary: TaskSummary }> = ({ summary }) => {
-  const query = useApiQuery((signal) => listOpenTasks('mine', {}, signal), []);
+  const query = useApiQuery((signal) => listOpenTasks('mine', {}, signal), [], 'tasks:open:mine');
   const { needsAttention, comingUp, dueToday } = sortTasks(query.data ?? []);
   const canCheckIn = summary.checkedInToday === false;
 
@@ -88,7 +89,19 @@ export const MemberDashboard: React.FC<{ summary: TaskSummary }> = ({ summary })
   }, '');
 
   const hasMeetings = summary.upcomingMeetings !== undefined;
+  const meetings = useTodaysMeetings(hasMeetings);
   const isEmpty = summary.open === 0 && summary.doneThisWeek === 0;
+
+  // One paint once both have answered, so the meetings column can't push anything around.
+  const isSettling = [query, meetings].some((q) => q.data === undefined && !q.error);
+  if (isSettling) {
+    return (
+      <>
+        <DashboardGreeting />
+        <DashboardSkeleton side={hasMeetings} />
+      </>
+    );
+  }
 
   return (
     <>
@@ -190,7 +203,7 @@ export const MemberDashboard: React.FC<{ summary: TaskSummary }> = ({ summary })
           </div>
           {hasMeetings && (
             <div className="min-w-0">
-              <MeetingsCard />
+              <MeetingsCard query={meetings} />
             </div>
           )}
         </div>

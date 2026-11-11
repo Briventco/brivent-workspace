@@ -67,16 +67,10 @@ interface IconButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> 
   variant?: 'ghost' | 'secondary';
 }
 
-export const IconButton: React.FC<IconButtonProps> = ({
-  icon,
-  label,
-  size = 'md',
-  variant = 'ghost',
-  className = '',
-  type = 'button',
-  ...props
-}) => (
+export const IconButton = React.forwardRef<HTMLButtonElement, IconButtonProps>(
+  ({ icon, label, size = 'md', variant = 'ghost', className = '', type = 'button', ...props }, ref) => (
   <button
+    ref={ref}
     type={type}
     aria-label={label}
     title={label}
@@ -85,4 +79,6 @@ export const IconButton: React.FC<IconButtonProps> = ({
   >
     <Icon name={icon} />
   </button>
+  ),
 );
+IconButton.displayName = 'IconButton';

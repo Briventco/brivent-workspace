@@ -50,7 +50,10 @@ const UserMenu: React.FC = () => {
         className="me"
       >
         <Avatar name={user.fullName} id={user.id} />
-        <span className="hidden sm:block text-left min-w-0 max-w-[12rem]">
+        <span
+          className="hidden sm:block text-left min-w-0 max-w-[12rem]"
+          title={`${user.fullName}${personTitle(user) ? ` · ${personTitle(user)}` : ''}`}
+        >
           <span className="block font-semibold text-text truncate">{user.fullName}</span>
           <span className="block text-caption text-text-2 truncate">{personTitle(user)}</span>
         </span>

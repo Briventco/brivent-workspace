@@ -1,7 +1,7 @@
 import React from 'react';
 import { listMeetings, Meeting } from '../../api/meetings';
 import { Link } from '../../lib/router';
-import { useApiQuery } from '../../lib/useApiQuery';
+import { ApiQuery, useApiQuery } from '../../lib/useApiQuery';
 import { format24Hour, watDate } from '../../lib/wat';
 import { AsyncState } from '../ui/AsyncState';
 import { Card, CardHeader } from '../ui/Card';
@@ -12,15 +12,24 @@ const minutes = (meeting: Meeting) =>
 const place = (meeting: Meeting) =>
   [meeting.location, `${meeting.attendees.length} people`].filter(Boolean).join(' · ');
 
-/** Only rendered once the summary reports meetings. Invites answered No aren't on the day's plan. */
-export const MeetingsCard: React.FC = () => {
-  const query = useApiQuery(async (signal) => {
-    const today = watDate();
-    const meetings = await listMeetings(today, today, 'mine', signal);
-    return meetings.filter(
-      (meeting) => meeting.status === 'SCHEDULED' && meeting.myRsvp !== 'NO',
-    );
-  }, []);
+/** Today's plan for the signed-in person. Invites answered No aren't on it. */
+export function useTodaysMeetings(enabled: boolean): ApiQuery<Meeting[]> {
+  return useApiQuery(
+    async (signal) => {
+      if (!enabled) return [];
+      const today = watDate();
+      const meetings = await listMeetings(today, today, 'mine', signal);
+      return meetings.filter(
+        (meeting) => meeting.status === 'SCHEDULED' && meeting.myRsvp !== 'NO',
+      );
+    },
+    [enabled],
+    'meetings:today',
+  );
+}
+
+/** Only rendered once the summary reports meetings. */
+export const MeetingsCard: React.FC<{ query: ApiQuery<Meeting[]> }> = ({ query }) => {
 
   return (
     <Card>

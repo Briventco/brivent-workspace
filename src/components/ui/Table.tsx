@@ -4,11 +4,13 @@ interface TableProps {
   /** Named for screen readers. The wrapper scrolls sideways, so keyboards need to reach it. */
   caption: string;
   children: React.ReactNode;
+  /** Extra table classes, such as table-pin-first to keep names in view while scrolling. */
+  className?: string;
 }
 
-export const Table: React.FC<TableProps> = ({ caption, children }) => (
+export const Table: React.FC<TableProps> = ({ caption, children, className = '' }) => (
   <div className="table-wrap" tabIndex={0} role="region" aria-label={caption}>
-    <table className="table table-sticky">
+    <table className={`table table-sticky ${className}`}>
       <caption className="sr-only">{caption}</caption>
       {children}
     </table>

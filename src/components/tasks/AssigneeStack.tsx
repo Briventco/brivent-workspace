@@ -35,10 +35,10 @@ export const AssigneeStack: React.FC<AssigneeStackProps> = ({
         {extra > 0 && <span className="ml-1 text-small text-text-2">+{extra}</span>}
       </span>
       {showDetail && people.length === 1 && (
-        <span className="min-w-0">
-          {only.name}
+        <span className="min-w-0 max-w-[12rem]">
+          <span className="block truncate">{only.name}</span>
           {personTitle(only) && (
-            <span className="block text-small text-text-2">{personTitle(only)}</span>
+            <span className="block text-small text-text-2 truncate">{personTitle(only)}</span>
           )}
         </span>
       )}

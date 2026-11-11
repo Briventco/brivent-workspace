@@ -100,7 +100,7 @@ const ReviewPanel: React.FC<{
 };
 
 const ReviewQueue: React.FC = () => {
-  const query = useApiQuery((signal) => listReviews(signal), []);
+  const query = useApiQuery((signal) => listReviews(signal), [], 'learning:reviews');
   const [opened, setOpened] = useState<ReviewRequest | null>(null);
 
   return (
@@ -214,12 +214,21 @@ const LearnerTable: React.FC<{ enrollments: Enrollment[] }> = ({ enrollments }) 
           return (
             <TableRow key={id} onOpen={() => navigate(`/learning/enrollments/${id}`)}>
               <td>
-                <Link to={`/learning/enrollments/${id}`} className="font-semibold text-text">
+                <Link
+                  to={`/learning/enrollments/${id}`}
+                  className="block font-semibold text-text truncate max-w-[12rem]"
+                >
                   {learner.name}
                 </Link>
               </td>
-              <td className="text-text-2 whitespace-nowrap">{learner.position?.name ?? 'Not set'}</td>
-              <td>{track.title}</td>
+              <td className="text-text-2">
+                <span className="block truncate max-w-[10rem]">
+                  {learner.position?.name ?? 'Not set'}
+                </span>
+              </td>
+              <td>
+                <span className="block line-clamp-2 min-w-[10rem] max-w-[14rem]">{track.title}</span>
+              </td>
               <td className="whitespace-nowrap">{progress.percentComplete}%</td>
               <td>
                 <HealthBadge health={progress.health} />
@@ -242,6 +251,7 @@ const Learners: React.FC<{ scope: 'mentoring' | 'all'; tab: Tab }> = ({ scope, t
   const query = useApiQuery(
     (signal) => listEnrollments(scope, health ? { health } : {}, signal),
     [scope, health],
+    'learning:learners',
   );
 
   return (
@@ -335,7 +345,7 @@ const NewTrackModal: React.FC<{ onClose: () => void }> = ({ onClose }) => {
 };
 
 const Tracks: React.FC = () => {
-  const query = useApiQuery((signal) => listTracks(undefined, signal), []);
+  const query = useApiQuery((signal) => listTracks(undefined, signal), [], 'learning:tracks');
 
   return (
     <AsyncState
@@ -388,7 +398,7 @@ export const LearningView: React.FC = () => {
   const { can } = useSession();
   const search = useSearch();
   const isReviewer = can('createTrack');
-  const mine = useApiQuery((signal) => listEnrollments('mine', {}, signal), []);
+  const mine = useApiQuery((signal) => listEnrollments('mine', {}, signal), [], 'learning:mine');
   const hasOwn = (mine.data?.length ?? 0) > 0;
   const showMine = !isReviewer || hasOwn;
 

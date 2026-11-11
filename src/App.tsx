@@ -6,6 +6,7 @@ import { ErrorState, LoadingState, NoAccess } from './components/ui/AsyncState';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { RealtimeProvider } from './context/RealtimeContext';
 import { ToastProvider } from './context/ToastContext';
+import { useRouteTitle } from './lib/pageTitle';
 import { can } from './lib/permissions';
 import { navigate, usePathname } from './lib/router';
 import { resolvePublicRoute, resolveRoute } from './routes';
@@ -34,14 +35,8 @@ function redirectFor(session: Session | null, pathname: string): string | null {
   return pathname === LOGIN || pathname === CHANGE_PASSWORD ? returnPath() : null;
 }
 
-function usePageTitle(title: string) {
-  useEffect(() => {
-    document.title = `${title} | Brivent Workspace`;
-  }, [title]);
-}
-
 const PublicPage: React.FC<{ title: string; children: React.ReactNode }> = ({ title, children }) => {
-  usePageTitle(title);
+  useRouteTitle(title);
   return <>{children}</>;
 };
 
@@ -50,7 +45,7 @@ const AuthenticatedPage: React.FC<{ session: Session; pathname: string }> = ({
   pathname,
 }) => {
   const route = resolveRoute(pathname);
-  usePageTitle(route?.title ?? 'Page not found');
+  useRouteTitle(route?.title ?? 'Page not found');
 
   if (!route) return <NotFoundView />;
   if (route.action && !can(session, route.action)) return <NoAccess />;

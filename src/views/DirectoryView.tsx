@@ -54,8 +54,9 @@ export const DirectoryView: React.FC = () => {
   const query = useApiQuery<DirectoryUser[]>(
     (signal) => listDirectory(debouncedSearch, department, signal),
     [debouncedSearch, department],
+    'directory',
   );
-  const departments = useApiQuery((signal) => listDepartments(signal), []);
+  const departments = useApiQuery((signal) => listDepartments(signal), [], 'departments');
   const departmentFilter = [
     { value: '', label: 'All departments' },
     ...(departments.data ?? []).map(({ id, name }) => ({ value: id, label: name })),

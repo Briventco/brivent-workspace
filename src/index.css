@@ -189,7 +189,65 @@
   background: var(--text-3);
 }
 
+/*
+ * A grid item won't shrink below its content by default, so one long name could push a card past
+ * the screen edge. Text inside still truncates or wraps on its own terms.
+ */
+.grid > * {
+  min-width: 0;
+}
+
+/* Pressed states, so every click lands with a response. */
+.btn:active:not(:disabled),
+.chip:active,
+.menu-item:active,
+.bottom-tab:active {
+  transform: translateY(1px);
+}
+
+a.card,
+button.card {
+  transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+
+a.card:hover,
+button.card:hover {
+  border-color: var(--border-strong);
+  box-shadow: var(--sh-sm);
+}
+
+a.card:active,
+.li:active,
+.table tr.row-link:active td {
+  background: var(--surface-2);
+}
+
+.table-pin-first th:first-child,
+.table-pin-first td:first-child {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  background: var(--surface);
+  box-shadow: inset -1px 0 0 var(--border);
+}
+
+.table-pin-first th:first-child {
+  background: var(--surface-2);
+  z-index: 3;
+}
+
+.table-pin-first tr:hover td:first-child {
+  background: var(--surface-2);
+}
+
 @media (prefers-reduced-motion: reduce) {
+  .btn:active:not(:disabled),
+  .chip:active,
+  .menu-item:active,
+  .bottom-tab:active {
+    transform: none;
+  }
+
   *,
   *::before,
   *::after {

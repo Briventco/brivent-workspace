@@ -39,6 +39,7 @@ import { useSession } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { moveModule, nudgeItem, OrderedModule, orderOf, placeItem } from '../lib/learning';
 import { Link } from '../lib/router';
+import { useDetailTitle } from '../lib/pageTitle';
 import { useApiQuery } from '../lib/useApiQuery';
 
 const STATUS_LABEL: Record<TrackStatus, string> = {
@@ -504,6 +505,7 @@ export const TrackBuilderView: React.FC<{ trackId: string }> = ({ trackId }) => 
   const [confirmingArchive, setConfirmingArchive] = useState(false);
   const [isEnrolling, setIsEnrolling] = useState(false);
   const [statusError, setStatusError] = useState<string>();
+  useDetailTitle(track?.title);
 
   useEffect(() => {
     if (query.data) setTrack(query.data);

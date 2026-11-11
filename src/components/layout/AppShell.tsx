@@ -4,6 +4,7 @@ import { BottomBar } from './BottomBar';
 import { isNavActive } from './navItems';
 import { Sidebar } from './Sidebar';
 import { TopNavbar } from './TopNavbar';
+import { useOverflowTitles } from '../../lib/useOverflowTitles';
 import { useSidebarCollapsed } from './useSidebarCollapsed';
 
 export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -13,6 +14,7 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
   const isMessages = isNavActive('/messages', pathname);
   const isConversation = pathname.startsWith('/messages/');
   const isFirstRender = useRef(true);
+  useOverflowTitles();
 
   // Moves focus with the page, so keyboard and screen reader users land on the new content.
   useEffect(() => {

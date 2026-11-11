@@ -18,6 +18,7 @@ import { useToast } from '../context/ToastContext';
 import { nameAndTitle } from '../lib/people';
 import { Link, navigate } from '../lib/router';
 import { canChangeStatus, canEditDetails, formatDateTime, canComment } from '../lib/tasks';
+import { useDetailTitle } from '../lib/pageTitle';
 import { useApiQuery } from '../lib/useApiQuery';
 
 const STATUS_OPTIONS = TASK_STATUSES.map((value) => ({ value, label: STATUS_LABELS[value] }));
@@ -32,7 +33,12 @@ const BackLink: React.FC = () => (
   </Link>
 );
 
-const TaskDetails: React.FC<{ task: Task; onChanged: () => void }> = ({ task, onChanged }) => {
+const TaskDetails: React.FC<{
+  task: Task;
+  onChanged: () => void;
+  /** Shows a change before the server confirms it. */
+  onOptimistic: (changes: Partial<Task>) => void;
+}> = ({ task, onChanged, onOptimistic }) => {
   const { user, can } = useSession();
   const toast = useToast();
 
@@ -45,13 +51,16 @@ const TaskDetails: React.FC<{ task: Task; onChanged: () => void }> = ({ task, on
     canEditDetails(task, user.id, can) || can('assignTask');
 
   const handleStatusChange = async (status: TaskStatus) => {
+    const previous = task.status;
     setIsChangingStatus(true);
+    onOptimistic({ status });
     try {
       await updateTaskStatus(task.id, status);
       toast.success(`Moved to ${STATUS_LABELS[status]}.`);
       onChanged();
     } catch (error) {
-      toast.error(errorMessage(error));
+      onOptimistic({ status: previous });
+      toast.error(`${errorMessage(error)} It's back to ${STATUS_LABELS[previous]}.`);
     } finally {
       setIsChangingStatus(false);
     }
@@ -142,11 +151,11 @@ const TaskDetails: React.FC<{ task: Task; onChanged: () => void }> = ({ task, on
             )}
             <dl className="space-y-3">
               {facts.map(({ label, value }) => (
-                <div key={label} className="flex justify-between gap-4">
-                  <dt className="text-text-2 shrink-0">{label}</dt>
-                  <dd className="font-semibold text-right break-words min-w-0">
-                    {value}
-                  </dd>
+                // Label above value: this column is narrow, and a long name beside its label
+                // would wrap into a tall right-aligned block.
+                <div key={label}>
+                  <dt className="text-small text-text-2">{label}</dt>
+                  <dd className="font-semibold break-words min-w-0">{value}</dd>
                 </div>
               ))}
             </dl>
@@ -183,8 +192,9 @@ const TaskDetails: React.FC<{ task: Task; onChanged: () => void }> = ({ task, on
 };
 
 export const TaskDetailView: React.FC<{ taskId: string }> = ({ taskId }) => {
-  const query = useApiQuery<Task>((signal) => getTask(taskId, signal), [taskId]);
+  const query = useApiQuery<Task>((signal) => getTask(taskId, signal), [taskId], 'task');
   const { error } = query;
+  useDetailTitle(query.data?.title);
 
   // The API answers 404 for tasks you can't see, and 400 for an id that isn't one at all.
   const isMissing = error instanceof ApiError && (error.status === 404 || error.status === 400);
@@ -200,7 +210,13 @@ export const TaskDetailView: React.FC<{ taskId: string }> = ({ taskId }) => {
         />
       ) : (
         <AsyncState query={query} loadingLabel="Loading task…">
-          {(task) => <TaskDetails task={task} onChanged={query.reload} />}
+          {(task) => (
+            <TaskDetails
+              task={task}
+              onChanged={query.reload}
+              onOptimistic={(changes) => query.mutate((current) => ({ ...current, ...changes }))}
+            />
+          )}
         </AsyncState>
       )}
     </>
