@@ -1,7 +1,7 @@
 import React, { useRef, useState } from 'react';
 import { Message, ReplyQuote as Quote } from '../../api/types';
 import { useSession } from '../../context/AuthContext';
-import { BodyPart, bodyParts, toBody, toDraft } from '../../lib/messages';
+import { BodyPart, bodyParts, shortenLink, toBody, toDraft } from '../../lib/messages';
 import { Link } from '../../lib/router';
 import { formatTime } from '../../lib/wat';
 import { AssigneeStack } from '../tasks/AssigneeStack';
@@ -21,6 +21,21 @@ export const MessageText: React.FC<{ parts: BodyPart[]; children?: React.ReactNo
     <p className="whitespace-pre-wrap break-words">
       {parts.map((part, index) => {
         if (part.kind === 'text') return <React.Fragment key={index}>{part.text}</React.Fragment>;
+        if (part.kind === 'link') {
+          return (
+            <a
+              key={index}
+              href={part.href}
+              target="_blank"
+              rel="noopener noreferrer"
+              title={part.href}
+              className="msg-link"
+            >
+              <Icon name="link" size="sm" />
+              {shortenLink(part.text)}
+            </a>
+          );
+        }
         if (part.kind === 'task') {
           return (
             <Link key={index} to={`/tasks/${part.task.id}`} className="font-semibold">

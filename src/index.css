@@ -554,6 +554,25 @@ button.reply-quote:hover {
   transition: none;
 }
 
+.msg-link {
+  display: inline;
+  color: var(--brand);
+  font-weight: 500;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  overflow-wrap: anywhere;
+}
+
+.msg-link .ms {
+  display: inline-block;
+  margin-right: 2px;
+  vertical-align: -3px;
+}
+
+.msg-link:hover {
+  text-decoration-thickness: 2px;
+}
+
 .mention {
   padding: 0 3px;
   border-radius: var(--r-sm);

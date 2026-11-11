@@ -10,7 +10,54 @@ const BODY_TOKENS = /@\[([^\]]*)\]\(([^)]*)\)|https?:\/\/\S*?\/tasks\/([0-9a-f-]
 export type BodyPart =
   | { kind: 'text'; text: string }
   | { kind: 'mention'; id: string; name: string }
-  | { kind: 'task'; task: LinkedTask };
+  | { kind: 'task'; task: LinkedTask }
+  | { kind: 'link'; href: string; text: string };
+
+/**
+ * Bare domains only count with one of these endings, so "e.g." or "report.pdf" stay as words.
+ * Anything starting http:// or https:// is a link whatever its ending.
+ */
+const DOMAIN_ENDINGS =
+  'com|co|org|net|io|ng|dev|app|ai|edu|gov|uk|me|info|biz|xyz|tech|africa|so|ly|to|gg|tv|us|ca|de|fr|in|za|ke|gh';
+const LINK = new RegExp(
+  `https?:\\/\\/[^\\s<>]+|(?<![@\\w.-])(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\\.)+(?:${DOMAIN_ENDINGS})(?![\\w-])(?:\\/[^\\s<>]*)?`,
+  'gi',
+);
+const TRAILING = /[.,;:!?'"]+$/;
+
+/** Sentence punctuation after a link isn't part of it, nor is an unmatched closing bracket. */
+function trimLink(raw: string): string {
+  let link = raw.replace(TRAILING, '');
+  while (link.endsWith(')') && (link.match(/\(/g)?.length ?? 0) < (link.match(/\)/g)?.length ?? 0)) {
+    link = link.slice(0, -1).replace(TRAILING, '');
+  }
+  return link;
+}
+
+/** Splits plain text into words and links. Only http and https links are ever made clickable. */
+export function linkify(text: string): BodyPart[] {
+  const parts: BodyPart[] = [];
+  let cursor = 0;
+  for (const match of text.matchAll(LINK)) {
+    const link = trimLink(match[0]);
+    if (!link) continue;
+    if (match.index > cursor) parts.push({ kind: 'text', text: text.slice(cursor, match.index) });
+    const href = /^https?:\/\//i.test(link) ? link : `https://${link}`;
+    parts.push({ kind: 'link', href, text: link });
+    cursor = match.index + link.length;
+  }
+  if (cursor < text.length) parts.push({ kind: 'text', text: text.slice(cursor) });
+  return parts;
+}
+
+const SHORT_LINK = 48;
+
+/** Long addresses are cut in the middle, keeping the site and the end, which say the most. */
+export function shortenLink(text: string): string {
+  const shown = text.replace(/^https?:\/\/(www\.)?/i, '');
+  if (shown.length <= SHORT_LINK) return shown;
+  return `${shown.slice(0, 30)}…${shown.slice(-15)}`;
+}
 
 /** A mention the server recorded, a task this viewer can see, and everything else stays as text. */
 export function bodyParts(
@@ -21,7 +68,7 @@ export function bodyParts(
   const parts: BodyPart[] = [];
   let cursor = 0;
   const addText = (text: string) => {
-    if (text) parts.push({ kind: 'text', text });
+    if (text) parts.push(...linkify(text));
   };
 
   for (const match of body.matchAll(BODY_TOKENS)) {
@@ -39,7 +86,8 @@ export function bodyParts(
 
   // A message that's only a task link says it all in the card below it.
   const hasWords = parts.some(
-    (part) => part.kind === 'mention' || (part.kind === 'text' && part.text.trim()),
+    (part) =>
+      part.kind === 'mention' || part.kind === 'link' || (part.kind === 'text' && part.text.trim()),
   );
   return hasWords ? parts : [];
 }
