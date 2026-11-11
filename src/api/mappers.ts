@@ -1,4 +1,4 @@
-import { Named, Role, Session, User, UserStatus } from './types';
+import { AvatarUrls, Named, Role, Session, User, UserStatus } from './types';
 
 /**
  * The one place that knows how the backend's user differs from the agreed contract:
@@ -16,6 +16,7 @@ export interface BackendUser {
   department?: Named | null;
   position?: Named | null;
   permissions?: string[];
+  avatar?: AvatarUrls | null;
 }
 
 export function toUser(raw: BackendUser): User {
@@ -29,6 +30,7 @@ export function toUser(raw: BackendUser): User {
     createdAt: raw.createdAt,
     department: raw.department,
     position: raw.position,
+    avatar: raw.avatar ?? null,
   };
 }
 

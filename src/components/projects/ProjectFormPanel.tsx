@@ -188,7 +188,7 @@ export const ProjectFormPanel: React.FC<ProjectFormPanelProps> = ({ project, onC
               <ul className="mt-2 flex flex-wrap gap-2">
                 {members.map((member) => (
                   <li key={member.id} className="chip">
-                    <Avatar name={member.name} id={member.id} size="sm" />
+                    <Avatar name={member.name} id={member.id} avatar={member.avatar} size="sm" />
                     {member.name}
                     <IconButton
                       icon="close"

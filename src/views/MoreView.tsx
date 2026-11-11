@@ -25,7 +25,7 @@ export const MoreView: React.FC = () => {
       <h1 className="t-h1 mb-4">More</h1>
 
       <div className="flex items-center gap-3 mb-2">
-        <Avatar name={user.fullName} id={user.id} />
+        <Avatar name={user.fullName} id={user.id} avatar={user.avatar} />
         <div className="min-w-0 grow">
           <p className="font-semibold text-text truncate">{user.fullName}</p>
           <p className="text-small text-text-2 truncate">{personTitle(user)}</p>

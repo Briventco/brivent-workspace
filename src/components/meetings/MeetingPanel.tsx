@@ -107,7 +107,7 @@ const Details: React.FC<{
             const isOrganizer = person.id === meeting.organizer.id;
             return (
               <li key={person.id} className="flex items-center gap-2.5 min-w-0">
-                <Avatar name={person.name} id={person.id} size="sm" />
+                <Avatar name={person.name} id={person.id} avatar={person.avatar} size="sm" />
                 <span className="grow min-w-0">
                   <span className="block truncate">
                     {person.name}

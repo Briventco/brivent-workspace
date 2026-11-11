@@ -55,7 +55,7 @@ export const TaskAssignees: React.FC<TaskAssigneesProps> = ({ task, onChanged })
         <ul className="space-y-3">
           {task.assignees.map((person) => (
             <li key={person.id} className="flex items-start gap-2.5 min-w-0">
-              <Avatar name={person.name} id={person.id} size="sm" />
+              <Avatar name={person.name} id={person.id} avatar={person.avatar} size="sm" />
               <div className="min-w-0 grow">
                 <p className="font-semibold break-words">{person.name}</p>
                 {personTitle(person) && (

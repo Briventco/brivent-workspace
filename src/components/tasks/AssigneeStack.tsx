@@ -30,7 +30,7 @@ export const AssigneeStack: React.FC<AssigneeStackProps> = ({
     <span className="inline-flex items-center gap-2 min-w-0">
       <span className="av-stack shrink-0 items-center" role="img" title={names} aria-label={names}>
         {people.slice(0, MAX_SHOWN).map((person) => (
-          <Avatar key={person.id} name={person.name} id={person.id} size={size} />
+          <Avatar key={person.id} name={person.name} id={person.id} avatar={person.avatar} size={size} />
         ))}
         {extra > 0 && <span className="ml-1 text-small text-text-2">+{extra}</span>}
       </span>

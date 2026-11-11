@@ -127,7 +127,7 @@ const ReviewQueue: React.FC = () => {
                   onClick={() => setOpened(request)}
                   className="w-full flex items-center gap-3 px-4 py-3 text-left bg-transparent border-0 cursor-pointer text-text hover:bg-surface-2"
                 >
-                  <Avatar name={request.learner.name} id={request.learner.id} />
+                  <Avatar name={request.learner.name} id={request.learner.id} avatar={request.learner.avatar} />
                   <span className="min-w-0 grow">
                     <span className="block font-semibold truncate">{request.item.title}</span>
                     <span className="block text-small text-text-2 truncate">
@@ -172,7 +172,7 @@ const LearnerCards: React.FC<{ enrollments: Enrollment[] }> = ({ enrollments }) 
             className="card card-pad block text-text hover:no-underline"
           >
             <div className="flex items-center gap-3">
-              <Avatar name={learner.name} id={learner.id} />
+              <Avatar name={learner.name} id={learner.id} avatar={learner.avatar} />
               <div className="min-w-0 grow">
                 <p className="font-semibold truncate">{learner.name}</p>
                 <p className="text-small text-text-2 truncate">{track.title}</p>

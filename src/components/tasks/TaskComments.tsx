@@ -65,7 +65,7 @@ export const TaskComments: React.FC<{ taskId: string; canComment: boolean }> = (
             <ul className="space-y-4">
               {comments.map((comment) => (
                 <li key={comment.id} className="flex gap-3">
-                  <Avatar name={comment.author.name} id={comment.author.id} />
+                  <Avatar name={comment.author.name} id={comment.author.id} avatar={comment.author.avatar} />
                   <div className="min-w-0 flex-1">
                     <p>
                       <span className="font-medium text-text">{nameAndTitle(comment.author)}</span>{' '}

@@ -91,6 +91,61 @@ function toApiError(status: number, payload: ErrorPayload | null): ApiError {
   return new ApiError(status, code, best ?? 'Something went wrong. Please try again.', fieldErrors);
 }
 
+export interface UploadOptions {
+  method?: 'PUT' | 'POST';
+  /** 0 to 1, as the bytes go up. */
+  onProgress?: (fraction: number) => void;
+}
+
+/**
+ * Sends a form with a file. It uses XMLHttpRequest rather than fetch, because only XHR reports
+ * upload progress. Errors and an expired session are handled exactly as `request` does.
+ */
+export function uploadForm<T>(path: string, form: FormData, options: UploadOptions = {}): Promise<T> {
+  const { method = 'PUT', onProgress } = options;
+  if (!BASE_URL) {
+    return Promise.reject(
+      new ApiError(0, 'CONFIG_ERROR', 'The app is missing VITE_API_BASE_URL. See .env.example.'),
+    );
+  }
+  const token = getToken();
+
+  return new Promise<T>((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open(method, `${BASE_URL}${path}`);
+    // No Content-Type: the browser adds the multipart boundary itself.
+    if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+    xhr.timeout = 120_000;
+    xhr.upload.onprogress = (event) => {
+      if (event.lengthComputable) onProgress?.(event.loaded / event.total);
+    };
+    xhr.onload = () => {
+      let payload: unknown = null;
+      try {
+        payload = JSON.parse(xhr.responseText);
+      } catch {
+        // Not JSON, such as a proxy's error page. The status still says what happened.
+      }
+      if (xhr.status >= 200 && xhr.status < 300) {
+        resolve(payload as T);
+        return;
+      }
+      if (xhr.status === 401 && token && token === getToken()) {
+        clearToken();
+        unauthorizedHandler?.();
+      }
+      reject(toApiError(xhr.status, payload as ErrorPayload | null));
+    };
+    xhr.onerror = () =>
+      reject(
+        new ApiError(0, 'NETWORK_ERROR', "Can't reach the server. Check your connection and try again."),
+      );
+    xhr.ontimeout = () =>
+      reject(new ApiError(0, 'TIMEOUT', 'The upload took too long. Please try again.'));
+    xhr.send(form);
+  });
+}
+
 export async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const { method = 'GET', body, signal, anonymous = false } = options;
 

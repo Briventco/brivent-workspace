@@ -1,7 +1,7 @@
 import React from 'react';
 import { format } from 'date-fns';
 import { PasswordChangeForm } from '../components/auth/PasswordChangeForm';
-import { Avatar } from '../components/ui/Avatar';
+import { ProfilePicture } from '../components/settings/ProfilePicture';
 import { Button } from '../components/ui/Button';
 import { Card, CardBody, CardHeader } from '../components/ui/Card';
 import { PageHeader } from '../components/ui/PageHeader';
@@ -32,13 +32,11 @@ export const SettingsView: React.FC = () => {
               <h2 className="t-h2">My profile</h2>
             </CardHeader>
             <CardBody>
-              <div className="flex items-center gap-4">
-                <Avatar name={user.fullName} id={user.id} size="xl" />
-                <div className="min-w-0">
-                  <p className="t-h2 break-words">{user.fullName}</p>
-                  <p className="mt-1 text-text-2 break-words">{personTitle(user)}</p>
-                </div>
+              <div className="min-w-0 mb-5">
+                <p className="t-h2 break-words">{user.fullName}</p>
+                <p className="mt-1 text-text-2 break-words">{personTitle(user)}</p>
               </div>
+              <ProfilePicture />
               <dl className="mt-6 space-y-3">
                 {details.map(({ label, value }) => (
                   <div key={label} className="flex flex-wrap justify-between gap-x-4 gap-y-0.5">

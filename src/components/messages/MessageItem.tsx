@@ -244,7 +244,7 @@ export const MessageItem: React.FC<MessageItemProps> = ({
         </span>
       )}
       <div className="w-8 shrink-0">
-        {!isContinued && <Avatar name={author.name} id={author.id} />}
+        {!isContinued && <Avatar name={author.name} id={author.id} avatar={author.avatar} />}
       </div>
 
       <div className="grow min-w-0">

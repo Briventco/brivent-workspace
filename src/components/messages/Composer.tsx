@@ -44,7 +44,9 @@ function useSuggestions(conversation: Conversation, query: string | null): Sugge
 
   if (conversation.otherUser) {
     const { id, name, position } = conversation.otherUser;
-    return matches({ id, name }) ? [{ id, name, title: position?.name ?? '' }] : [];
+    return matches({ id, name })
+      ? [{ id, name, avatar: conversation.otherUser.avatar, title: position?.name ?? '' }]
+      : [];
   }
   // Filtered again here: the search is debounced, so Enter can land before its results do, and
   // it must never pick someone from the previous list.
@@ -54,6 +56,7 @@ function useSuggestions(conversation: Conversation, query: string | null): Sugge
     .map((person) => ({
       id: person.id,
       name: person.name,
+      avatar: person.avatar,
       title: nameAndTitle(person).slice(person.name.length + 3),
     }));
 }
@@ -213,7 +216,7 @@ export const Composer: React.FC<ComposerProps> = ({
               onMouseEnter={() => setActiveIndex(index)}
               className={`menu-item h-auto py-1.5 ${index === activeIndex ? 'hl' : ''}`}
             >
-              <Avatar name={person.name} id={person.id} size="sm" />
+              <Avatar name={person.name} id={person.id} avatar={person.avatar} size="sm" />
               <span className="min-w-0">
                 <span className="block truncate">{person.name}</span>
                 {person.title && (
