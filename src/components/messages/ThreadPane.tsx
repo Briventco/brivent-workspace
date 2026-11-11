@@ -126,6 +126,7 @@ interface MessageListProps {
   onResend: (item: PendingMessage) => void;
   onDiscard: (item: PendingMessage) => void;
   onReply: (message: Message) => void;
+  onHidePreview: (message: Message, url: string) => void;
 }
 
 const HIGHLIGHT_MS = 1600;
@@ -141,6 +142,7 @@ const MessageList: React.FC<MessageListProps> = ({
   onResend,
   onDiscard,
   onReply,
+  onHidePreview,
 }) => {
   const { user, can } = useSession();
   const toast = useToast();
@@ -180,6 +182,9 @@ const MessageList: React.FC<MessageListProps> = ({
     } else if (lastKey !== previous.lastKey) {
       if (isAtBottom.current || lastIsMine) toBottom();
       else setHasNewBelow(true);
+    } else if (element.scrollHeight !== previous.height && isAtBottom.current) {
+      // Something grew in place, such as a link preview arriving: stay with the latest message.
+      toBottom();
     }
     seen.current = { firstId, lastKey, height: element.scrollHeight };
   }, [messages, lastKey, lastIsMine, toBottom]);
@@ -328,6 +333,7 @@ const MessageList: React.FC<MessageListProps> = ({
                     onReply={canReply ? () => onReply(message) : undefined}
                     onOpenQuote={openQuote}
                     onMediaExpired={refreshExpiredMedia}
+                    onHidePreview={isMine ? (url) => onHidePreview(message, url) : undefined}
                     isHighlighted={highlightId === message.id}
                   />
                 </React.Fragment>

@@ -6,6 +6,7 @@ import { Link } from '../../lib/router';
 import { formatTime } from '../../lib/wat';
 import { AssigneeStack } from '../tasks/AssigneeStack';
 import { Avatar } from '../ui/Avatar';
+import { LinkPreviewCard } from './LinkPreviewCard';
 import { PhotoGrid } from './media/PhotoGrid';
 import { VoicePlayer } from './media/VoicePlayer';
 import { StatusBadge } from '../ui/badges';
@@ -190,6 +191,8 @@ interface MessageItemProps {
   onOpenQuote: (messageId: string) => void;
   /** A photo or recording failed to load, most likely because its signed address ran out. */
   onMediaExpired: () => void;
+  /** The sender's own messages only. */
+  onHidePreview?: (url: string) => void;
   isHighlighted: boolean;
 }
 
@@ -203,8 +206,11 @@ export const MessageItem: React.FC<MessageItemProps> = ({
   onReply,
   onOpenQuote,
   onMediaExpired,
+  onHidePreview,
   isHighlighted,
 }) => {
+  // Previews on a message that's already showing ease in. Ones loaded with history just appear.
+  const hadPreviewsAtFirst = useRef(message.linkPreviews.length > 0);
   const [isEditing, setIsEditing] = useState(false);
   const [swipe, setSwipe] = useState(0);
   const rowRef = useRef<HTMLLIElement>(null);
@@ -309,6 +315,14 @@ export const MessageItem: React.FC<MessageItemProps> = ({
             {parts.length > 0 ? <MessageText parts={parts}>{edited}</MessageText> : edited}
             {linkedTasks.map((task) => (
               <TaskCard key={task.id} task={task} />
+            ))}
+            {message.linkPreviews.map((preview) => (
+              <LinkPreviewCard
+                key={preview.url}
+                preview={preview}
+                isNew={!hadPreviewsAtFirst.current}
+                onHide={onHidePreview ? () => onHidePreview(preview.url) : undefined}
+              />
             ))}
           </>
         )}

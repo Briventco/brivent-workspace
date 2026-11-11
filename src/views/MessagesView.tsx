@@ -8,6 +8,7 @@ import {
   leaveChannel,
   markRead,
   sendMessage,
+  setLinkPreviewHidden,
   uploadAttachment,
   setMuted,
   updateChannel,
@@ -199,6 +200,20 @@ export const MessagesView: React.FC<{ conversationId?: string }> = ({ conversati
     [conversationId, patch, conversations.reload, conversations.data],
   );
 
+  /** Gone at once for the sender, and back if the server says no. */
+  const hidePreview = async (message: Message, url: string) => {
+    thread.apply({
+      ...message,
+      linkPreviews: message.linkPreviews.filter((preview) => preview.url !== url),
+    });
+    try {
+      thread.apply(await setLinkPreviewHidden(message.id, url, true));
+    } catch (error) {
+      thread.apply(message);
+      toast.error(`${errorMessage(error)} The preview is still showing.`);
+    }
+  };
+
   const edit = async (message: Message, body: string) => {
     try {
       thread.apply(await editMessage(message.id, body));
@@ -311,6 +326,7 @@ export const MessagesView: React.FC<{ conversationId?: string }> = ({ conversati
           onDraftChange={(draft) => drafts.current.set(conversationId, draft)}
           onSend={send}
           onSendVoice={sendVoice}
+          onHidePreview={hidePreview}
           onRead={read}
           onEdit={edit}
           onDelete={(message) => setConfirming({ kind: 'delete', message })}

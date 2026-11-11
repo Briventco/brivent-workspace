@@ -266,6 +266,16 @@ export interface Attachment {
 
 export const MAX_PHOTOS = 10;
 
+/** A card for a link in a message. Every field but `url` can be missing. */
+export interface LinkPreview {
+  url: string;
+  title: string | null;
+  description: string | null;
+  siteName: string | null;
+  imageUrl: string | null;
+  faviconUrl: string | null;
+}
+
 export interface Message {
   id: string;
   conversationId: string;
@@ -274,6 +284,11 @@ export interface Message {
   replyTo: ReplyQuote | null;
   /** Up to 10 photos, or one voice note. Empty when there are none, or once deleted. */
   attachments: Attachment[];
+  /**
+   * Up to 3 cards, fetched by the server after sending, so they usually arrive a moment later in
+   * message:updated. Hidden and failed ones are left out.
+   */
+  linkPreviews: LinkPreview[];
   /** Null once deleted. */
   body: string | null;
   mentions: Named[];

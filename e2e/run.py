@@ -246,6 +246,8 @@ def main():
                         run_links(browser, admin_token)
                         if has_attachments(admin_token):
                             run_attachments(browser, admin_token)
+                        if has_link_previews(admin_token):
+                            run_link_previews(browser, admin_token)
                     if "learning.view" in call("GET", "/me", admin_token)["user"]["permissions"]:
                         run_learning(browser, admin_token)
             run_team_lead(browser, lead_task, lead_name, intern_name)
@@ -3534,6 +3536,113 @@ def run_attachments(browser, admin_token):
 
     listener.context.close()
     loud.close()
+
+
+def has_link_previews(token):
+    """The hide route exists when a bad message id is refused as invalid rather than not found."""
+    try:
+        call("PATCH", "/messages/not-an-id/link-previews", token, {"url": "https://example.com", "isHidden": True})
+    except urllib.error.HTTPError as error:
+        return error.code != 404
+    return True
+
+
+def run_link_previews(browser, admin_token):
+    lead_auth = call("POST", "/auth/login", body=dict(zip(("email", "password"), credentials("TEAM_LEAD"))))
+    intern_auth = call("POST", "/auth/login", body=dict(zip(("email", "password"), credentials("INTERN"))))
+    channel = call("POST", "/channels", lead_auth["token"], {"name": f"e2e-previews-{RUN}", "visibility": "PUBLIC"})["conversation"]
+    call("POST", f"/channels/{channel['id']}/join", intern_auth["token"])
+    url = f"{APP}/messages/{channel['id']}"
+    label = f"#{channel['name']}"
+
+    sender = new_page(browser)
+    receiver = new_page(browser)
+    log_in(sender, "TEAM_LEAD")
+    log_in(receiver, "INTERN")
+    sender.goto(url)
+    receiver.goto(url)
+
+    def arrives_live():
+        send_message(sender, label, f"{PREFIX} have a look at https://example.com today")
+        row = message_list(receiver).get_by_role("listitem").filter(has_text="have a look at")
+        expect(row).to_be_visible()
+        # The server fetches the page after sending, so the card follows in message:updated.
+        card = row.locator(".link-card")
+        expect(card).to_be_visible(timeout=20_000)
+        expect(card).to_have_class(re.compile("is-new"))
+        expect(card).to_contain_text("Example Domain")
+        link = card.get_by_role("link")
+        expect(link).to_have_attribute("href", re.compile(r"^https://example\.com"))
+        expect(link).to_have_attribute("target", "_blank")
+        expect(link).to_have_attribute("rel", "noopener noreferrer")
+        expect(card.get_by_role("button", name=re.compile("^Hide the preview"))).to_have_count(0)
+
+    step("previews: a card arrives live a moment after sending, and opens safely", arrives_live)
+
+    def sender_hides():
+        row = message_list(sender).get_by_role("listitem").filter(has_text="have a look at")
+        card = row.locator(".link-card")
+        expect(card).to_be_visible(timeout=20_000)
+        with sender.expect_request(lambda r: r.method == "PATCH" and r.url.endswith("/link-previews")) as hidden:
+            card.get_by_role("button", name=re.compile("^Hide the preview")).click()
+        assert hidden.value.post_data_json == {"url": "https://example.com/", "isHidden": True} or hidden.value.post_data_json["isHidden"] is True
+        expect(card).to_have_count(0)
+        expect(message_list(receiver).get_by_role("listitem").filter(has_text="have a look at").locator(".link-card")).to_have_count(0)
+
+    step("previews: the sender can hide a card, and it goes for everyone", sender_hides)
+
+    def hide_rolls_back():
+        send_message(sender, label, f"{PREFIX} and again https://example.com")
+        row = message_list(sender).get_by_role("listitem").filter(has_text="and again")
+        card = row.locator(".link-card")
+        expect(card).to_be_visible(timeout=20_000)
+        sender.route("**/link-previews", lambda route: route.fulfill(status=500, json={"error": {"code": "E2E", "message": "Server trouble."}}))
+        card.get_by_role("button", name=re.compile("^Hide the preview")).click()
+        expect(sender.get_by_text("The preview is still showing.")).to_be_visible()
+        expect(card).to_be_visible()
+        sender.unroute("**/link-previews")
+
+    step("previews: a failed hide puts the card back with a toast", hide_rolls_back)
+
+    def safe_images():
+        def doctor(route):
+            response = route.fetch()
+            data = response.json()
+            for message in data["messages"]:
+                if message["linkPreviews"]:
+                    message["linkPreviews"] = [
+                        {**message["linkPreviews"][0], "imageUrl": "http://insecure.example/picture.png", "faviconUrl": None},
+                        {**message["linkPreviews"][0], "url": "https://example.com/broken", "imageUrl": "https://example.com/no-such-image.png"},
+                    ]
+            route.fulfill(response=response, json=data)
+
+        page = new_page(browser)
+        page.route(re.compile(r".*/conversations/[^/]+/messages.*"), doctor)
+        log_in(page, "INTERN")
+        page.goto(url)
+        cards = message_list(page).locator(".link-card")
+        expect(cards.first).to_be_visible()
+        expect(cards.first.locator("img.link-card-image")).to_have_count(0)
+        broken = message_list(page).locator('.link-card:has(a[href="https://example.com/broken"])').first
+        expect(broken).to_contain_text("Example Domain")
+        expect(broken.locator("img.link-card-image")).to_have_count(0, timeout=15_000)
+        expect_no_sideways_scroll(page, "preview cards")
+        page.context.close()
+
+    step("previews: only https images load, and a broken one leaves a plain card", safe_images)
+
+    def phone():
+        page = new_page(browser, MOBILE)
+        log_in(page, "INTERN")
+        page.goto(url)
+        expect(message_list(page).locator(".link-card").first).to_be_visible()
+        expect_no_sideways_scroll(page, "preview cards on a phone")
+        page.context.close()
+
+    step("previews: cards fit a phone", phone)
+
+    sender.context.close()
+    receiver.context.close()
 
 
 def run_departments(browser, admin_token):
