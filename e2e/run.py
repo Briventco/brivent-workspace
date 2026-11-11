@@ -115,6 +115,12 @@ def open_nav_link(page, name):
     page.get_by_role("navigation", name="Main").get_by_role("link", name=re.compile(name)).click()
 
 
+def user_action(page, name, action):
+    """Row actions in User Management sit behind a "..." menu, as in the design."""
+    page.get_by_role("button", name=f"Actions for {name}").click()
+    page.get_by_role("menu").get_by_role("menuitem", name=action).click()
+
+
 def pick_assignee(dialog, name, label="Assignee"):
     picker = dialog.get_by_role("combobox", name=label)
     picker.click()
@@ -229,6 +235,7 @@ def main():
                     run_meetings(browser, admin_token)
                     run_departments(browser, admin_token)
                     run_multi_assignee(browser, admin_token)
+                    run_ui_polish(browser, admin_token)
                     if "unreadMessages" in call("GET", "/tasks/summary", admin_token)["summary"]:
                         run_messages(browser, admin_token)
                     if "learning.view" in call("GET", "/me", admin_token)["user"]["permissions"]:
@@ -523,7 +530,7 @@ def run_admin(browser, page, title, throwaway, intern_name):
 
     def reset_dialog():
         open_nav_link(page, "User Management")
-        page.get_by_role("button", name=f"Reset password for {intern_name}").click()
+        user_action(page, intern_name, "Reset password")
         dialog = page.get_by_role("dialog")
         expect(dialog.get_by_role("heading", name="Reset password?")).to_be_visible()
         dialog.get_by_role("button", name="Cancel").click()
@@ -602,8 +609,12 @@ def run_invites(browser, admin):
         row = admin.get_by_role("row", name=re.compile(re.escape(name)))
         expect(row.get_by_text("Pending invite", exact=True)).to_be_visible()
         expect(row.get_by_role("button", name=f"Resend invite to {name}")).to_be_visible()
-        expect(row.get_by_role("button", name=f"Reset password for {name}")).to_have_count(0)
-        expect(row.get_by_role("button", name=f"Deactivate {name}")).to_be_visible()
+        row.get_by_role("button", name=f"Actions for {name}").click()
+        menu = admin.get_by_role("menu")
+        expect(menu.get_by_role("menuitem", name="Reset password")).to_have_count(0)
+        expect(menu.get_by_role("menuitem", name="Deactivate")).to_be_visible()
+        admin.keyboard.press("Escape")
+        expect(menu).to_have_count(0)
     step("User Management: pending user gets the badge and Resend invite", pending_row)
 
     def resend():
@@ -752,7 +763,7 @@ def run_invites(browser, admin):
 
     def admin_reset():
         admin.reload()
-        admin.get_by_role("button", name=f"Reset password for {name}").click()
+        user_action(admin, name, "Reset password")
         dialog = admin.get_by_role("dialog")
         expect(dialog.get_by_text("stop working immediately")).to_be_visible()
         dialog.get_by_role("button", name="Reset password").click()
@@ -798,7 +809,7 @@ def run_invites(browser, admin):
         expect_manual_link(dialog)
         admin.get_by_role("button", name=f"Resend invite to {name4}").click()
         expect_manual_link(admin.get_by_role("dialog"))
-        admin.get_by_role("button", name=f"Reset password for {name}").click()
+        user_action(admin, name, "Reset password")
         admin.get_by_role("dialog").get_by_role("button", name="Reset password").click()
         expect_manual_link(admin.get_by_role("dialog"))
         admin.unroute_all()
@@ -807,7 +818,7 @@ def run_invites(browser, admin):
     def deactivate_pending():
         name5, email5 = f"E2E Off {RUN}", f"e2e.off.{RUN}@example.test"
         invite(admin, name5, email5)
-        admin.get_by_role("button", name=f"Deactivate {name5}").click()
+        user_action(admin, name5, "Deactivate")
         admin.get_by_role("dialog").get_by_role("button", name="Deactivate").click()
         row = admin.get_by_role("row", name=re.compile(re.escape(name5)))
         expect(row.get_by_text("Deactivated", exact=True)).to_be_visible()
@@ -2538,6 +2549,177 @@ def run_learning(browser, admin_token):
     call("POST", f"/users/{late['id']}/deactivate", admin_token)
 
 
+LAYOUT_SHIFT = """
+window.__cls = 0;
+new PerformanceObserver((list) => {
+  for (const entry of list.getEntries()) if (!entry.hadRecentInput) window.__cls += entry.value;
+}).observe({ type: 'layout-shift', buffered: true });
+"""
+
+
+def run_ui_polish(browser, admin_token):
+    long_name = f"Oluwaseyifunmi Adeyemi-Bankole Gbadamosi {RUN}"
+    person = active_user(admin_token, long_name, f"e2e.longname.{RUN}@example.test")
+    lead_auth = call("POST", "/auth/login", body=dict(zip(("email", "password"), credentials("TEAM_LEAD"))))
+    task = call(
+        "POST",
+        "/tasks",
+        lead_auth["token"],
+        {
+            "title": f"{PREFIX} a deliberately long task title that has to wrap onto a second line in a narrow card",
+            "priority": "MEDIUM",
+            "assigneeIds": [lead_auth["user"]["id"]],
+        },
+    )["task"]
+
+    admin = new_page(browser, {"width": 1280, "height": 900})
+    log_in(admin, "SUPER_ADMIN")
+
+    def tab_titles():
+        open_nav_link(admin, "My Tasks")
+        expect(admin).to_have_title("My Tasks · Brivent Workspace")
+        admin.goto(f"{APP}/tasks/{task['id']}")
+        expect(admin).to_have_title(f"{task['title']} · Brivent Workspace")
+        open_nav_link(admin, "Projects")
+        expect(admin).to_have_title("Projects · Brivent Workspace")
+
+    step("Polish: every tab is titled, and detail pages name what's open", tab_titles)
+
+    intern_name = call(
+        "POST", "/auth/login", body=dict(zip(("email", "password"), credentials("INTERN")))
+    )["user"]["name"]
+
+    def user_menu():
+        open_nav_link(admin, "User Management")
+        trigger = admin.get_by_role("button", name=f"Actions for {intern_name}")
+        card = admin.locator(".card", has=trigger)
+        expect(trigger).to_be_visible()
+        box, frame = trigger.bounding_box(), card.bounding_box()
+        assert box["x"] + box["width"] <= frame["x"] + frame["width"], "the menu button is cut off at 1280"
+        expect_no_sideways_scroll(admin, "User Management at 1280")
+
+        trigger.focus()
+        admin.keyboard.press("Enter")
+        menu = admin.get_by_role("menu", name=f"Actions for {intern_name}")
+        expect(menu.get_by_role("menuitem", name="Edit")).to_be_focused()
+        admin.keyboard.press("ArrowDown")
+        expect(menu.get_by_role("menuitem", name="Reset password")).to_be_focused()
+        admin.keyboard.press("Escape")
+        expect(menu).to_have_count(0)
+        expect(trigger).to_be_focused()
+
+        # Scrolling moves the menu with its button rather than closing it under the pointer.
+        trigger.click()
+        admin.mouse.wheel(0, 120)
+        admin.wait_for_timeout(200)
+        expect(menu).to_be_visible()
+        admin.keyboard.press("Escape")
+
+        # Active people with no department fit on one page, wherever the full list puts you.
+        admin.goto(f"{APP}/users?department=none")
+        own = admin.get_by_role("row", name=re.compile("\\(you\\)")).first
+        own.get_by_role("button", name=re.compile("^Actions for")).click()
+        expect(admin.get_by_role("menuitem", name="Edit")).to_be_visible()
+        expect(admin.get_by_role("menuitem", name="Deactivate")).to_have_count(0)
+        admin.keyboard.press("Escape")
+
+    step("Polish: User Management fits at 1280, with row actions in a keyboard menu", user_menu)
+
+    def full_names():
+        admin.goto(f"{APP}/directory")
+        name = admin.locator(".truncate", has_text=long_name).first
+        expect(name).to_be_visible()
+        name.hover()
+        expect(admin.locator(f'[title="{long_name}"]').first).to_be_attached()
+
+    step("Polish: a name cut short shows in full on hover", full_names)
+
+    def keeps_data():
+        open_nav_link(admin, "Projects")
+        expect(admin.get_by_role("heading", name="Projects", exact=True)).to_be_visible()
+        expect(admin.locator("main .card").first).to_be_visible()
+        open_nav_link(admin, "My Tasks")
+        held = []
+        admin.route("**/api/projects*", lambda route: held.append(route))
+        open_nav_link(admin, "Projects")
+        # The request is held unanswered, so anything showing came from the last visit.
+        expect(admin.locator("main .card").first).to_be_visible(timeout=2_000)
+        expect(admin.get_by_role("status", name=re.compile("Loading"))).to_have_count(0)
+        for route in held:
+            route.continue_()
+        admin.unroute("**/api/projects*")
+
+    step("Polish: coming back to a page shows its last data at once", keeps_data)
+
+    def rollback():
+        admin.goto(f"{APP}/tasks?view=all")
+        row = admin.locator("li, tr").filter(has_text=task["title"]).first
+        select = row.get_by_role("combobox")
+        expect(select).to_have_value("TODO")
+        admin.route(
+            "**/api/tasks/*/status",
+            lambda route: route.fulfill(status=500, json={"error": {"code": "E2E", "message": "Server trouble."}}),
+        )
+        select.select_option("IN_PROGRESS")
+        expect(admin.get_by_text(re.compile("It's back to To do"))).to_be_visible()
+        expect(select).to_have_value("TODO")
+        admin.unroute("**/api/tasks/*/status")
+
+        admin.goto(f"{APP}/tasks/{task['id']}")
+        status = admin.get_by_label("Status")
+        admin.route("**/api/tasks/*/status", lambda route: admin.wait_for_timeout(1_500) or route.continue_())
+        status.select_option("BLOCKED")
+        expect(admin.get_by_text("Blocked", exact=True).first).to_be_visible(timeout=1_000)
+        expect(admin.get_by_text("Moved to Blocked.")).to_be_visible()
+        admin.unroute("**/api/tasks/*/status")
+
+    step("Polish: status shows at once, and rolls back with a toast if the save fails", rollback)
+
+    lead = browser.new_context(viewport={"width": 1440, "height": 900}).new_page()
+    lead.add_init_script(LAYOUT_SHIFT)
+    lead.on("console", lambda m: m.type == "error" and "Failed to load resource" not in m.text and console_problems.append(m.text[:200]))
+    log_in(lead, "TEAM_LEAD")
+
+    def own_tasks():
+        lead.goto(f"{APP}/")
+        lead.wait_for_load_state("networkidle")
+        lead.wait_for_timeout(500)
+        shift = lead.evaluate("window.__cls")
+        assert shift < 0.1, f"the dashboard moved by {shift} while loading"
+
+        card = lead.locator(".card", has=lead.get_by_role("heading", name="Your own tasks"))
+        row = card.get_by_role("link", name=re.compile(re.escape(task["title"][:40])))
+        title, status = row.locator(".title"), row.locator(".badge").first
+        assert title.bounding_box()["y"] + title.bounding_box()["height"] <= status.bounding_box()["y"] + 1, \
+            "the status should sit under the title"
+
+    step("Polish: the dashboard loads without jumping, and own tasks put the title first", own_tasks)
+    lead.context.close()
+
+    def reduced_motion():
+        page = browser.new_context(reduced_motion="reduce").new_page()
+        log_in(page, "TEAM_LEAD")
+        duration = page.evaluate("getComputedStyle(document.querySelector('.btn')).transitionDuration")
+        assert all(float(part.rstrip("ms")) < 0.01 or part.endswith("ms") and float(part[:-2]) < 1 for part in duration.split(", ")), duration
+        page.context.close()
+
+    step("Polish: reduced motion turns transitions off", reduced_motion)
+
+    def phone_with_long_names():
+        page = new_page(browser, MOBILE)
+        log_in(page, "SUPER_ADMIN")
+        for path in ("/", "/directory", "/users", "/projects", "/learning", "/settings", f"/tasks/{task['id']}"):
+            page.goto(f"{APP}{path}")
+            page.get_by_role("heading", level=1).first.wait_for()
+            expect_no_sideways_scroll(page, f"{path} with long names")
+        page.context.close()
+
+    step("Polish: long names and titles never push a phone page sideways", phone_with_long_names)
+
+    admin.context.close()
+    call("POST", f"/users/{person['id']}/deactivate", admin_token)
+
+
 def run_departments(browser, admin_token):
     lead_login = dict(zip(("email", "password"), credentials("TEAM_LEAD")))
     intern_login = dict(zip(("email", "password"), credentials("INTERN")))
@@ -2610,7 +2792,7 @@ def run_departments(browser, admin_token):
     step("Dashboard prompt: Super Admin only, opens the active people with no department", prompt)
 
     def edit_placement():
-        admin.get_by_role("button", name=f"Edit {lead_name}").click()
+        user_action(admin, lead_name, "Edit")
         dialog = admin.get_by_role("dialog")
         expect(dialog.get_by_label("Access level")).to_be_visible()
         expect(dialog.get_by_label("Position")).to_be_disabled()
@@ -2630,7 +2812,7 @@ def run_departments(browser, admin_token):
         row = admin.get_by_role("row", name=re.compile(re.escape(lead_name)))
         expect(row.get_by_role("cell", name="Graphic Designer")).to_be_visible()
         expect(admin.get_by_role("row", name=re.compile(re.escape(intern_name)))).to_have_count(0)
-        admin.get_by_role("button", name=f"Edit {lead_name}").click()
+        user_action(admin, lead_name, "Edit")
         dialog = admin.get_by_role("dialog")
         expect(dialog.get_by_label("Position")).to_have_value(designer["id"])
         dialog.get_by_label("Department").select_option(label="Engineering")
@@ -2806,7 +2988,7 @@ def run_departments(browser, admin_token):
         expect(panel).to_have_count(0)
 
         admin.goto(f"{APP}/users")
-        admin.get_by_role("button", name=f"Edit {intern_name}").click()
+        user_action(admin, intern_name, "Edit")
         dialog = admin.get_by_role("dialog")
         select = dialog.get_by_label("Position")
         expect(select.locator("option:checked")).to_have_text(f"{position_name} (archived)")
@@ -2850,7 +3032,7 @@ def run_departments(browser, admin_token):
         admin.get_by_role("switch", name="Show archived").click()
         expect(admin.get_by_role("heading", name=department_name)).to_be_visible()
         admin.goto(f"{APP}/users")
-        admin.get_by_role("button", name=f"Edit {intern_name}").click()
+        user_action(admin, intern_name, "Edit")
         dialog = admin.get_by_role("dialog")
         expect(dialog.get_by_label("Department").locator("option:checked")).to_have_text(f"{department_name} (archived)")
         dialog.get_by_role("button", name="Cancel").click()
