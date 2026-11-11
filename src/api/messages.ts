@@ -125,6 +125,14 @@ export async function uploadAttachment(
   return data.attachment;
 }
 
+/** Hides a preview on your own message, or shows it again. */
+export function setLinkPreviewHidden(id: string, url: string, isHidden: boolean): Promise<Message> {
+  return request<{ message: Message }>(`/messages/${id}/link-previews`, {
+    method: 'PATCH',
+    body: { url, isHidden },
+  }).then(toMessage);
+}
+
 export function editMessage(id: string, body: string): Promise<Message> {
   return request<{ message: Message }>(`/messages/${id}`, {
     method: 'PATCH',
