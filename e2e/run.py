@@ -236,6 +236,8 @@ def main():
                     run_departments(browser, admin_token)
                     run_multi_assignee(browser, admin_token)
                     run_ui_polish(browser, admin_token)
+                    if "avatar" in call("GET", "/me", admin_token)["user"]:
+                        run_avatars(browser, admin_token)
                     if "unreadMessages" in call("GET", "/tasks/summary", admin_token)["summary"]:
                         run_messages(browser, admin_token)
                         run_replies(browser, admin_token)
@@ -2879,6 +2881,202 @@ def run_replies(browser, admin_token):
 
     sender.context.close()
     receiver.context.close()
+
+
+def make_png(width, height, shade=0):
+    """A real PNG, built here so the test needs no image files or libraries."""
+    import struct
+    import zlib
+
+    def chunk(kind, data):
+        body = kind + data
+        return struct.pack(">I", len(data)) + body + struct.pack(">I", zlib.crc32(body) & 0xFFFFFFFF)
+
+    rows = b"".join(
+        b"\x00" + b"".join(bytes(((x + shade) % 256, (y * 2) % 256, 160)) for x in range(width))
+        for y in range(height)
+    )
+    header = struct.pack(">IIBBBBB", width, height, 8, 2, 0, 0, 0)
+    return b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", header) + chunk(b"IDAT", zlib.compress(rows)) + chunk(b"IEND", b"")
+
+
+def choose_picture(page, name, mime, data):
+    page.get_by_label("Choose a profile picture").set_input_files({"name": name, "mimeType": mime, "buffer": data})
+
+
+def run_avatars(browser, admin_token):
+    person = active_user(admin_token, f"E2E Picture {RUN}", f"e2e.picture.{RUN}@example.test")
+    page = new_page(browser)
+    log_in_as(page, person["email"], person["password"])
+    top_bar_photo = page.get_by_role("button", name=re.compile("^Account menu")).locator("img")
+
+    def prompt():
+        page.goto(f"{APP}/")
+        card = page.get_by_role("complementary", name="Add a profile picture")
+        expect(card).to_be_visible()
+        expect(card.get_by_role("link", name="Add a picture")).to_have_attribute("href", "/settings")
+        card.get_by_role("button", name="Dismiss").click()
+        expect(card).to_have_count(0)
+        page.reload()
+        expect(page.get_by_role("heading", name=GREETING)).to_be_visible()
+        expect(card).to_have_count(0)
+
+    step("avatars: a gentle dashboard prompt that stays dismissed", prompt)
+
+    def refused_files():
+        open_nav_link(page, "Settings")
+        expect(page.get_by_role("button", name="Upload picture")).to_be_visible()
+        choose_picture(page, "party.gif", "image/gif", b"GIF89a" + b"\x00" * 64)
+        expect(page.get_by_role("alert")).to_contain_text("GIFs can't be used")
+        choose_picture(page, "IMG_0042.HEIC", "image/heic", b"\x00" * 64)
+        expect(page.get_by_role("alert")).to_contain_text("HEIC")
+        choose_picture(page, "huge.png", "image/png", b"\x89PNG" + b"\x00" * (5 * 1024 * 1024 + 10))
+        expect(page.get_by_role("alert")).to_contain_text("over 5 MB")
+        expect(page.get_by_role("dialog")).to_have_count(0)
+
+    step("avatars: GIF, HEIC and files over 5 MB are refused with a clear reason", refused_files)
+
+    def server_error_keeps_old():
+        choose_picture(page, "face.png", "image/png", make_png(400, 300))
+        dialog = page.get_by_role("dialog", name="Position your picture")
+        expect(dialog.get_by_role("img", name=re.compile("Picture preview"))).to_be_visible()
+        page.route(
+            "**/api/me/avatar",
+            lambda route: route.fulfill(
+                status=415,
+                json={"error": {"code": "UNSUPPORTED_FILE_TYPE", "message": "Use a JPEG, PNG or WebP image."}},
+            ),
+        )
+        dialog.get_by_role("button", name="Save picture").click()
+        expect(dialog.get_by_text("Use a JPEG, PNG or WebP image.")).to_be_visible()
+        expect(top_bar_photo).to_have_count(0)
+        page.unroute("**/api/me/avatar")
+        dialog.get_by_role("button", name="Cancel").click()
+
+    step("avatars: a refused upload explains itself and keeps the old picture", server_error_keeps_old)
+
+    def upload():
+        choose_picture(page, "face.png", "image/png", make_png(800, 600))
+        dialog = page.get_by_role("dialog", name="Position your picture")
+        frame = dialog.get_by_role("img", name=re.compile("Picture preview"))
+        expect(frame.locator("img")).to_be_visible()
+        expect(dialog.get_by_text("couldn't be opened")).to_have_count(0)
+        before = frame.locator("img").evaluate("img => img.style.transform")
+        box = frame.bounding_box()
+        page.mouse.move(box["x"] + 128, box["y"] + 128)
+        page.mouse.down()
+        page.mouse.move(box["x"] + 60, box["y"] + 128, steps=5)
+        page.mouse.up()
+        assert frame.locator("img").evaluate("img => img.style.transform") != before, "dragging didn't move it"
+        dialog.get_by_label("Zoom").fill("1.6")
+        frame.focus()
+        page.keyboard.press("ArrowLeft")
+
+        def slow(route):
+            assert route.request.method == "PUT"
+            assert "multipart/form-data" in route.request.headers["content-type"]
+            page.wait_for_timeout(800)
+            route.continue_()
+
+        page.route("**/api/me/avatar", slow)
+        dialog.get_by_role("button", name="Save picture").click()
+        expect(dialog.get_by_role("status", name=re.compile("Uploading"))).to_be_visible()
+        expect(top_bar_photo).to_have_count(0)
+        expect(page.get_by_text("Profile picture updated.")).to_be_visible()
+        page.unroute("**/api/me/avatar")
+        expect(top_bar_photo).to_be_visible()
+        expect(top_bar_photo).to_have_attribute("loading", "lazy")
+        me = call("GET", "/me", call("POST", "/auth/login", body={"email": person["email"], "password": person["password"]})["token"])["user"]
+        assert me["avatar"] and me["avatar"]["small"].endswith("-128.webp"), me["avatar"]
+        state["first"] = me["avatar"]["small"]
+        expect(page.get_by_role("button", name="Change picture")).to_be_visible()
+        expect_no_sideways_scroll(page, "Settings with a picture")
+
+    state = {}
+    step("avatars: crop by dragging and zooming, then upload with progress", upload)
+
+    def everywhere():
+        admin = new_page(browser)
+        log_in(admin, "SUPER_ADMIN")
+        admin.goto(f"{APP}/directory")
+        card = admin.get_by_role("listitem").filter(has_text=person["name"])
+        photo = card.locator(".av img")
+        # The directory's avatars are the large size, so it shows the 512px picture.
+        expect(photo).to_have_attribute("src", state["first"].replace("-128.webp", "-512.webp"))
+        expect(photo).to_have_attribute("loading", "lazy")
+        box = card.locator(".av").bounding_box()
+        assert abs(box["width"] - box["height"]) < 1, "the picture squashed its circle"
+
+        admin.route("**/uploads/**", lambda route: route.abort())
+        admin.route(re.compile(r".*/avatars/.*"), lambda route: route.abort())
+        admin.reload()
+        circle = admin.get_by_role("listitem").filter(has_text=person["name"]).locator(".av")
+        expect(circle.locator("img")).to_have_count(0)
+        words = person["name"].split()
+        expect(circle).to_have_text((words[0][0] + words[-1][0]).upper())
+        admin.unroute_all()
+        state["admin"] = admin
+
+    step("avatars: pictures show for everyone, lazily, and fall back to initials", everywhere)
+
+    def change_picture():
+        page.goto(f"{APP}/settings")
+        choose_picture(page, "newer.png", "image/png", make_png(300, 500, shade=90))
+        page.get_by_role("dialog", name="Position your picture").get_by_role("button", name="Save picture").click()
+        expect(page.get_by_text("Profile picture updated.")).to_be_visible()
+        expect(top_bar_photo).not_to_have_attribute("src", re.compile(re.escape(state["first"].rsplit("/", 1)[1])))
+
+    step("avatars: changing the picture gives it a new address", change_picture)
+
+    def admin_removes():
+        admin = state["admin"]
+        admin.goto(f"{APP}/users?department=none")
+        user_action(admin, person["name"], "Remove picture")
+        dialog = admin.get_by_role("dialog")
+        expect(dialog).to_contain_text("initials will show instead")
+        dialog.get_by_role("button", name="Remove picture").click()
+        expect(admin.get_by_text(f"{person['name']}'s picture has been removed.")).to_be_visible()
+        admin.get_by_role("button", name=f"Actions for {person['name']}").click()
+        expect(admin.get_by_role("menuitem", name="Remove picture")).to_have_count(0)
+        admin.keyboard.press("Escape")
+        admin.context.close()
+
+        lead = new_page(browser)
+        log_in(lead, "TEAM_LEAD")
+        lead.goto(f"{APP}/users")
+        expect(lead.get_by_role("heading", name="You don't have access to this")).to_be_visible()
+        lead.context.close()
+
+    step("avatars: Super Admin removes someone's picture after confirming", admin_removes)
+
+    def remove_own():
+        page.goto(f"{APP}/settings")
+        choose_picture(page, "again.png", "image/png", make_png(200, 200, shade=40))
+        page.get_by_role("dialog", name="Position your picture").get_by_role("button", name="Save picture").click()
+        expect(top_bar_photo).to_be_visible()
+        page.get_by_role("button", name="Remove", exact=True).click()
+        page.get_by_role("dialog").get_by_role("button", name="Remove").click()
+        expect(page.get_by_text("Profile picture removed.")).to_be_visible()
+        expect(top_bar_photo).to_have_count(0)
+        expect(page.get_by_role("button", name="Upload picture")).to_be_visible()
+
+    step("avatars: anyone can remove their own picture", remove_own)
+
+    def phone():
+        small = new_page(browser, MOBILE)
+        log_in_as(small, person["email"], person["password"])
+        small.goto(f"{APP}/settings")
+        choose_picture(small, "phone.png", "image/png", make_png(640, 480))
+        dialog = small.get_by_role("dialog", name="Position your picture")
+        expect(dialog.get_by_role("button", name="Save picture")).to_be_in_viewport()
+        expect_no_sideways_scroll(small, "the crop dialog")
+        dialog.get_by_role("button", name="Cancel").click()
+        small.context.close()
+
+    step("avatars: upload and crop work at 375px", phone)
+
+    page.context.close()
+    call("POST", f"/users/{person['id']}/deactivate", admin_token)
 
 
 def run_departments(browser, admin_token):
