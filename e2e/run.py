@@ -238,6 +238,7 @@ def main():
                     run_ui_polish(browser, admin_token)
                     if "unreadMessages" in call("GET", "/tasks/summary", admin_token)["summary"]:
                         run_messages(browser, admin_token)
+                        run_replies(browser, admin_token)
                     if "learning.view" in call("GET", "/me", admin_token)["user"]["permissions"]:
                         run_learning(browser, admin_token)
             run_team_lead(browser, lead_task, lead_name, intern_name)
@@ -1081,13 +1082,13 @@ def run_checkins(browser, admin_token):
     step("Check-in review: blockers first, filters work, no nudges", review)
 
     def reply():
-        card.get_by_role("button", name="Reply").click()
+        card.get_by_role("button", name="Reply", exact=True).click()
         lead.get_by_label(f"Reply to {name}").fill(f"On it, run {RUN}.")
         lead.get_by_role("button", name="Send reply").click()
         expect(card.get_by_text(f"On it, run {RUN}.")).to_be_visible()
         member.goto(f"{APP}/daily")
         expect(member.get_by_text(f"On it, run {RUN}.")).to_be_visible()
-        expect(member.get_by_role("button", name="Reply")).to_have_count(0)
+        expect(member.get_by_role("button", name="Reply", exact=True)).to_have_count(0)
     step("Check-in review: a reply shows on their check-in", reply)
 
     def make_task():
@@ -2718,6 +2719,166 @@ def run_ui_polish(browser, admin_token):
 
     admin.context.close()
     call("POST", f"/users/{person['id']}/deactivate", admin_token)
+
+
+def touch_swipe(page, locator, dx, dy=0, steps=8):
+    """A real touch swipe through the browser, since Playwright only taps."""
+    box = locator.bounding_box()
+    x, y = box["x"] + 40, box["y"] + box["height"] / 2
+    session = page.context.new_cdp_session(page)
+    session.send("Input.dispatchTouchEvent", {"type": "touchStart", "touchPoints": [{"x": x, "y": y}]})
+    for n in range(1, steps + 1):
+        session.send("Input.dispatchTouchEvent", {"type": "touchMove", "touchPoints": [{"x": x + dx * n / steps, "y": y + dy * n / steps}]})
+    session.send("Input.dispatchTouchEvent", {"type": "touchEnd", "touchPoints": []})
+    session.detach()
+
+
+def touch_hold(page, locator, ms=700):
+    box = locator.bounding_box()
+    point = {"x": box["x"] + 40, "y": box["y"] + box["height"] / 2}
+    session = page.context.new_cdp_session(page)
+    session.send("Input.dispatchTouchEvent", {"type": "touchStart", "touchPoints": [point]})
+    page.wait_for_timeout(ms)
+    session.send("Input.dispatchTouchEvent", {"type": "touchEnd", "touchPoints": []})
+    session.detach()
+
+
+def run_replies(browser, admin_token):
+    lead_auth = call("POST", "/auth/login", body=dict(zip(("email", "password"), credentials("TEAM_LEAD"))))
+    intern_auth = call("POST", "/auth/login", body=dict(zip(("email", "password"), credentials("INTERN"))))
+    lead_token, intern_token = lead_auth["token"], intern_auth["token"]
+    lead_user, intern_user = lead_auth["user"], intern_auth["user"]
+    channel = call("POST", "/channels", lead_token, {"name": f"e2e-replies-{RUN}", "visibility": "PUBLIC"})["conversation"]
+    call("POST", f"/channels/{channel['id']}/join", intern_token)
+    label = f"#{channel['name']}"
+    state = {}
+
+    sender = new_page(browser)
+    receiver = new_page(browser)
+    log_in(sender, "TEAM_LEAD")
+    log_in(receiver, "INTERN")
+
+    def reply_and_cancel():
+        original = post_message(intern_token, channel["id"], f"{PREFIX} is the report ready?")
+        state["original"] = original
+        sender.goto(f"{APP}/messages/{channel['id']}")
+        receiver.goto(f"{APP}/messages/{channel['id']}")
+        row = message_list(sender).get_by_role("listitem").filter(has_text="is the report ready?")
+        row.hover()
+        row.get_by_role("button", name="Reply", exact=True).click()
+        bar = sender.get_by_role("status").filter(has_text=f"Replying to {intern_user['name']}")
+        expect(bar).to_contain_text("is the report ready?")
+        # The quote bar makes the composer taller, and the latest message stays in view above it.
+        expect(message_list(sender).get_by_role("listitem").last).to_be_in_viewport(ratio=0.9)
+        expect(message_box(sender, label)).to_be_focused()
+        sender.keyboard.press("Escape")
+        expect(bar).to_have_count(0)
+
+        row.hover()
+        row.get_by_role("button", name="Reply", exact=True).click()
+        expect(bar).to_be_visible()
+        bar.get_by_role("button", name="Cancel reply").click()
+        expect(bar).to_have_count(0)
+
+    step("replies: Reply shows a quote bar, and Esc or X cancels it", reply_and_cancel)
+
+    def send_reply():
+        before = call("GET", "/tasks/summary", intern_token)["summary"]["unreadMentions"]
+        receiver.goto(f"{APP}/tasks")
+        row = message_list(sender).get_by_role("listitem").filter(has_text="is the report ready?")
+        row.hover()
+        row.get_by_role("button", name="Reply", exact=True).click()
+        with sender.expect_request(lambda r: r.method == "POST" and r.url.endswith("/messages")) as sent:
+            send_message(sender, label, f"{PREFIX} yes, it's ready")
+        assert sent.value.post_data_json["replyToId"] == state["original"]["id"]
+        reply = message_list(sender).get_by_role("listitem").filter(has_text="yes, it's ready")
+        expect(reply.locator(".reply-quote")).to_contain_text(intern_user["name"])
+        expect(reply.locator(".reply-quote")).to_contain_text("is the report ready?")
+        expect(sender.get_by_role("status").filter(has_text="Replying to")).to_have_count(0)
+
+        nav = receiver.get_by_role("link", name=re.compile("^Internal Messages"))
+        expect(nav).to_contain_text("unread")
+        after = call("GET", "/tasks/summary", intern_token)["summary"]["unreadMentions"]
+        assert after == before + 1, f"a reply should count as a mention: {before} -> {after}"
+        receiver.goto(f"{APP}/messages/{channel['id']}")
+        quote = message_list(receiver).get_by_role("listitem").filter(has_text="yes, it's ready").locator(".reply-quote")
+        expect(quote).to_contain_text("is the report ready?")
+        expect(quote).to_have_class(re.compile("is-mine"))
+
+    step("replies: a reply sends replyToId, quotes the original, and counts as a mention", send_reply)
+
+    def live_quote_updates():
+        quote = message_list(sender).get_by_role("listitem").filter(has_text="yes, it's ready").locator(".reply-quote")
+        row = message_list(receiver).get_by_role("listitem").filter(has_text="is the report ready?").first
+        row.hover()
+        row.get_by_role("button", name="Edit message").click()
+        box = receiver.get_by_role("textbox", name="Edit message")
+        box.fill(f"{PREFIX} is the quarterly report ready?")
+        box.press("Enter")
+        expect(quote).to_contain_text("is the quarterly report ready?")
+
+        row = message_list(receiver).get_by_role("listitem").filter(has_text="is the quarterly report ready?").first
+        row.hover()
+        row.get_by_role("button", name="Delete message").click()
+        receiver.get_by_role("dialog").get_by_role("button", name="Delete").click()
+        expect(quote).to_contain_text("Original message deleted")
+        expect(quote).not_to_contain_text("quarterly")
+
+    step("replies: editing or deleting the original updates every quote live", live_quote_updates)
+
+    def jump_to_original():
+        people = []
+        for n in range(2):
+            person = active_user(admin_token, f"E2E Talker {n} {RUN}", f"e2e.talker{n}.{RUN}@example.test")
+            token = call("POST", "/auth/login", body={"email": person["email"], "password": person["password"]})["token"]
+            call("POST", f"/channels/{channel['id']}/join", token)
+            people.append((person, token))
+        first = post_message(people[0][1], channel["id"], f"{PREFIX} the very first question")
+        for n in range(58):
+            post_message(people[n % 2][1], channel["id"], f"Filler line {n:02d}.")
+        call(
+            "POST",
+            f"/conversations/{channel['id']}/messages",
+            lead_token,
+            {"body": f"{PREFIX} answering the first question", "clientId": f"e2e-jump-{RUN}", "replyToId": first["id"]},
+        )
+        sender.goto(f"{APP}/messages/{channel['id']}")
+        original = sender.locator(f"#message-{first['id']}")
+        expect(original).to_have_count(0)
+        message_list(sender).get_by_role("button", name=re.compile("Go to the original message")).last.click()
+        expect(original).to_be_in_viewport()
+        expect(original).to_have_class(re.compile("is-highlighted"))
+        expect(original).not_to_have_class(re.compile("is-highlighted"), timeout=5_000)
+        for person, _ in people:
+            call("POST", f"/users/{person['id']}/deactivate", admin_token)
+
+    step("replies: clicking a quote loads older pages and highlights the original", jump_to_original)
+
+    def phone_gestures():
+        page = browser.new_context(viewport=MOBILE, has_touch=True, is_mobile=True).new_page()
+        log_in(page, "INTERN")
+        page.goto(f"{APP}/messages/{channel['id']}")
+        row = message_list(page).get_by_role("listitem").filter(has_text="answering the first question").last
+        expect(row).to_be_visible()
+        expect(row.get_by_role("button", name="Reply", exact=True)).to_be_hidden()
+        touch_hold(page, row)
+        expect(row.get_by_role("button", name="Reply", exact=True)).to_be_visible()
+
+        touch_swipe(page, row, 90)
+        bar = page.get_by_role("status").filter(has_text=f"Replying to {lead_user['name']}")
+        expect(bar).to_contain_text("answering the first question")
+        expect_no_sideways_scroll(page, "conversation with a reply")
+        send_message(page, label, f"{PREFIX} sent from a phone")
+        expect(message_list(page).get_by_role("listitem").filter(has_text="sent from a phone").locator(".reply-quote")).to_be_visible()
+
+        touch_swipe(page, row, 20, 60)
+        expect(page.get_by_role("status").filter(has_text="Replying to")).to_have_count(0)
+        page.context.close()
+
+    step("replies: on phones, hold shows Reply and swiping right replies", phone_gestures)
+
+    sender.context.close()
+    receiver.context.close()
 
 
 def run_departments(browser, admin_token):

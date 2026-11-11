@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { listMessages } from '../api/messages';
 import { Message } from '../api/types';
-import { mergeMessages } from './messages';
+import { mergeMessages, refreshQuotes } from './messages';
 
 interface ThreadState {
   /** Oldest first. */
@@ -27,6 +27,8 @@ export function useThread(conversationId: string | null) {
   const [state, setState] = useState(INITIAL);
   const currentId = useRef(conversationId);
   currentId.current = conversationId;
+  const latest = useRef(state);
+  latest.current = state;
 
   const fetchLatest = useCallback(
     async (signal?: AbortSignal) => {
@@ -73,10 +75,39 @@ export function useThread(conversationId: string | null) {
     if (message.conversationId !== currentId.current) return;
     setState((current) =>
       current.isLoaded
-        ? { ...current, messages: mergeMessages(current.messages, [message]) }
+        ? { ...current, messages: refreshQuotes(mergeMessages(current.messages, [message]), message) }
         : current,
     );
   }, []);
+
+  /**
+   * Loads older pages until a message is on screen, for jumping to the original of a quote.
+   * Resolves false if the conversation runs out first.
+   */
+  const loadUntil = useCallback(
+    async (messageId: string): Promise<boolean> => {
+      if (!conversationId) return false;
+      let { messages, hasMore } = latest.current;
+      for (let page = 0; page < 40; page += 1) {
+        if (messages.some(({ id }) => id === messageId)) return true;
+        if (!hasMore || messages.length === 0) return false;
+        setState((current) => ({ ...current, isLoadingOlder: true }));
+        const older = await listMessages(conversationId, messages[0].id);
+        if (currentId.current !== conversationId) return false;
+        messages = mergeMessages(messages, older.messages);
+        hasMore = older.hasMore;
+        const merged = messages;
+        setState((current) => ({
+          ...current,
+          messages: mergeMessages(current.messages, merged),
+          hasMore: older.hasMore,
+          isLoadingOlder: false,
+        }));
+      }
+      return false;
+    },
+    [conversationId],
+  );
 
   const oldestId = state.messages[0]?.id;
   const canLoadOlder = state.hasMore && !state.isLoadingOlder;
@@ -99,7 +130,7 @@ export function useThread(conversationId: string | null) {
     }
   }, [conversationId, oldestId, canLoadOlder]);
 
-  return { ...state, apply, refetch, retry, loadOlder };
+  return { ...state, apply, refetch, retry, loadOlder, loadUntil };
 }
 
 export type Thread = ReturnType<typeof useThread>;

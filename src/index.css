@@ -480,6 +480,42 @@ a.card:active,
   box-shadow: none;
 }
 
+.reply-quote {
+  display: block;
+  max-width: 32rem;
+  margin: 2px 0 4px;
+  padding: 4px 10px;
+  border: 0;
+  border-left: 2px solid var(--border-strong);
+  border-radius: var(--r-sm);
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: 13px;
+  line-height: 18px;
+}
+
+button.reply-quote {
+  width: 100%;
+  cursor: pointer;
+}
+
+button.reply-quote:hover {
+  border-left-color: var(--brand);
+}
+
+.reply-quote.is-mine {
+  border-left-color: var(--brand);
+}
+
+.message-row {
+  transition: background-color 600ms ease;
+}
+
+.message-row.is-highlighted {
+  background: var(--brand-50);
+  transition: none;
+}
+
 .mention {
   padding: 0 3px;
   border-radius: var(--r-sm);

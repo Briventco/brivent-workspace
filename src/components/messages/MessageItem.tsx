@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Message } from '../../api/types';
+import React, { useRef, useState } from 'react';
+import { Message, ReplyQuote as Quote } from '../../api/types';
 import { useSession } from '../../context/AuthContext';
 import { BodyPart, bodyParts, toBody, toDraft } from '../../lib/messages';
 import { Link } from '../../lib/router';
@@ -107,6 +107,54 @@ const EditForm: React.FC<{
   );
 };
 
+const ATTACHMENT_LABEL = { IMAGE: 'Photo', VOICE: 'Voice note' } as const;
+const ATTACHMENT_ICON = { IMAGE: 'image', VOICE: 'mic' } as const;
+
+/** The compact quote above a reply. With `onOpen`, clicking it jumps to the original. */
+export const ReplyQuote: React.FC<{ quote: Quote; onOpen?: () => void }> = ({ quote, onOpen }) => {
+  const { user } = useSession();
+  const isGone = quote.deletedAt !== null;
+  const isToMe = quote.author.id === user.id;
+
+  let text: React.ReactNode = quote.bodyPreview;
+  if (isGone) {
+    text = <span className="italic">Original message deleted</span>;
+  } else if (!quote.bodyPreview && quote.attachmentKind) {
+    text = (
+      <span className="inline-flex items-center gap-1">
+        <Icon name={ATTACHMENT_ICON[quote.attachmentKind]} size="sm" />
+        {ATTACHMENT_LABEL[quote.attachmentKind]}
+      </span>
+    );
+  }
+
+  const content = (
+    <>
+      <span className={`block font-semibold truncate ${isToMe ? 'text-brand' : ''}`}>
+        {quote.author.name}
+      </span>
+      <span className="block truncate text-text-2">{text}</span>
+    </>
+  );
+  const className = `reply-quote ${isToMe ? 'is-mine' : ''}`;
+
+  return onOpen && !isGone ? (
+    <button
+      type="button"
+      onClick={onOpen}
+      className={`${className} text-left`}
+      aria-label={`Replying to ${quote.author.name}: ${quote.bodyPreview ?? ''}. Go to the original message`}
+    >
+      {content}
+    </button>
+  ) : (
+    <div className={className}>{content}</div>
+  );
+};
+
+const SWIPE_TO_REPLY = 56;
+const LONG_PRESS_MS = 450;
+
 interface MessageItemProps {
   message: Message;
   /** Follows the same person's last message, so the name and time aren't repeated. */
@@ -115,6 +163,10 @@ interface MessageItemProps {
   canDelete: boolean;
   onEdit: (body: string) => Promise<void>;
   onDelete: () => void;
+  /** Left out where replying isn't possible, like a channel you haven't joined. */
+  onReply?: () => void;
+  onOpenQuote: (messageId: string) => void;
+  isHighlighted: boolean;
 }
 
 export const MessageItem: React.FC<MessageItemProps> = ({
@@ -124,8 +176,14 @@ export const MessageItem: React.FC<MessageItemProps> = ({
   canDelete,
   onEdit,
   onDelete,
+  onReply,
+  onOpenQuote,
+  isHighlighted,
 }) => {
   const [isEditing, setIsEditing] = useState(false);
+  const [swipe, setSwipe] = useState(0);
+  const rowRef = useRef<HTMLLIElement>(null);
+  const touch = useRef<{ x: number; y: number; timer: number; isSwiping: boolean } | null>(null);
   const { author, body, mentions, linkedTasks, editedAt, createdAt } = message;
   const isGone = author.status === 'DEACTIVATED';
   const isDeleted = body === null;
@@ -134,14 +192,57 @@ export const MessageItem: React.FC<MessageItemProps> = ({
     <span className="text-caption text-text-3"> (edited)</span>
   );
 
+  const canReply = Boolean(onReply) && !isDeleted;
+
+  // Phones: swipe right to reply, or hold to bring up the actions, as a tap also does.
+  const handleTouchStart = (e: React.TouchEvent) => {
+    const { clientX, clientY } = e.touches[0];
+    const timer = window.setTimeout(() => rowRef.current?.focus(), LONG_PRESS_MS);
+    touch.current = { x: clientX, y: clientY, timer, isSwiping: false };
+  };
+  const handleTouchMove = (e: React.TouchEvent) => {
+    const start = touch.current;
+    if (!start) return;
+    const dx = e.touches[0].clientX - start.x;
+    const dy = e.touches[0].clientY - start.y;
+    if (Math.abs(dx) > 8 || Math.abs(dy) > 8) window.clearTimeout(start.timer);
+    if (!canReply) return;
+    if (!start.isSwiping && dx > 12 && Math.abs(dx) > Math.abs(dy) * 2) start.isSwiping = true;
+    if (start.isSwiping) setSwipe(Math.max(0, Math.min(dx, SWIPE_TO_REPLY + 16)));
+  };
+  const handleTouchEnd = () => {
+    const start = touch.current;
+    if (start) window.clearTimeout(start.timer);
+    if (start?.isSwiping && swipe >= SWIPE_TO_REPLY) onReply?.();
+    touch.current = null;
+    setSwipe(0);
+  };
+
   return (
     <li
+      ref={rowRef}
+      id={`message-${message.id}`}
       // A tap focuses the row, which is how touch screens reach the actions.
       tabIndex={-1}
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
+      onTouchCancel={handleTouchEnd}
       className={`message-row group relative flex gap-3 px-4 md:px-6 hover:bg-surface-2 ${
         isContinued ? 'py-0.5' : 'pt-2 pb-0.5'
-      }`}
+      } ${isHighlighted ? 'is-highlighted' : ''}`}
+      style={swipe ? { transform: `translateX(${swipe}px)` } : undefined}
     >
+      {swipe > 0 && (
+        <span
+          aria-hidden="true"
+          className={`absolute left-1 top-1/2 -translate-y-1/2 -translate-x-full ${
+            swipe >= SWIPE_TO_REPLY ? 'text-brand' : 'text-text-3'
+          }`}
+        >
+          <Icon name="reply" />
+        </span>
+      )}
       <div className="w-8 shrink-0">
         {!isContinued && <Avatar name={author.name} id={author.id} />}
       </div>
@@ -158,6 +259,9 @@ export const MessageItem: React.FC<MessageItemProps> = ({
           </p>
         )}
 
+        {message.replyTo && !isDeleted && (
+          <ReplyQuote quote={message.replyTo} onOpen={() => onOpenQuote(message.replyTo!.id)} />
+        )}
         {isDeleted ? (
           <p className="italic text-text-3">Message deleted</p>
         ) : isEditing ? (
@@ -179,8 +283,11 @@ export const MessageItem: React.FC<MessageItemProps> = ({
         )}
       </div>
 
-      {!isDeleted && !isEditing && (canEdit || canDelete) && (
+      {!isDeleted && !isEditing && (canEdit || canDelete || canReply) && (
         <div className="absolute right-4 md:right-6 -top-2 flex gap-0.5 rounded-md border border-border bg-surface shadow-sm opacity-0 group-hover:opacity-100 focus-within:opacity-100 group-focus:opacity-100 [@media(hover:none)]:invisible [@media(hover:none)]:group-focus-within:visible">
+          {canReply && (
+            <IconButton icon="reply" size="sm" label="Reply" onClick={onReply} />
+          )}
           {canEdit && (
             <IconButton
               icon="edit"

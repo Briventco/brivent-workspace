@@ -1,7 +1,8 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { errorMessage } from '../../api/client';
-import { Conversation, Message } from '../../api/types';
+import { Conversation, Message, ReplyQuote } from '../../api/types';
 import { useSession } from '../../context/AuthContext';
+import { useToast } from '../../context/ToastContext';
 import { PendingMessage } from '../../context/RealtimeContext';
 import {
   bodyParts,
@@ -24,7 +25,7 @@ import { Skeleton } from '../ui/Skeleton';
 import { Spinner } from '../ui/Spinner';
 import { Composer } from './Composer';
 import { ConversationIcon } from './ConversationList';
-import { MessageItem, MessageText } from './MessageItem';
+import { MessageItem, MessageText, ReplyQuote as QuoteView } from './MessageItem';
 
 const NEAR_EDGE_PX = 120;
 const AT_BOTTOM_PX = 40;
@@ -58,6 +59,7 @@ const PendingItem: React.FC<{
           <span className="font-semibold truncate">{user.fullName}</span>
           {!item.error && <span className="text-caption text-text-2">Sending…</span>}
         </p>
+        {item.replyTo && <QuoteView quote={item.replyTo} />}
         <MessageText parts={bodyParts(item.body, [], [])} />
         {item.error && (
           <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
@@ -111,7 +113,10 @@ interface MessageListProps {
   onDelete: (message: Message) => void;
   onResend: (item: PendingMessage) => void;
   onDiscard: (item: PendingMessage) => void;
+  onReply: (message: Message) => void;
 }
+
+const HIGHLIGHT_MS = 1600;
 
 const MessageList: React.FC<MessageListProps> = ({
   conversation,
@@ -123,8 +128,13 @@ const MessageList: React.FC<MessageListProps> = ({
   onDelete,
   onResend,
   onDiscard,
+  onReply,
 }) => {
   const { user, can } = useSession();
+  const toast = useToast();
+  const canReply = isMember && conversation.canPost;
+  const [highlightId, setHighlightId] = useState<string | null>(null);
+  const [jumpTo, setJumpTo] = useState<string | null>(null);
   const { messages, loadOlder } = thread;
   const scroller = useRef<HTMLDivElement>(null);
   const isAtBottom = useRef(true);
@@ -161,6 +171,50 @@ const MessageList: React.FC<MessageListProps> = ({
     }
     seen.current = { firstId, lastKey, height: element.scrollHeight };
   }, [messages, lastKey, lastIsMine, toBottom]);
+
+  // Runs once the original is on screen, which may be after older pages have loaded and the
+  // layout effect above has kept the reader's place.
+  useEffect(() => {
+    if (!jumpTo || !messages.some(({ id }) => id === jumpTo)) return;
+    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    document
+      .getElementById(`message-${jumpTo}`)
+      ?.scrollIntoView({ block: 'center', behavior: reduceMotion ? 'auto' : 'smooth' });
+    setHighlightId(jumpTo);
+    setJumpTo(null);
+  }, [jumpTo, messages]);
+
+  // Its own effect, so clearing the jump above can't cancel the fade.
+  useEffect(() => {
+    if (!highlightId) return;
+    const timer = window.setTimeout(() => setHighlightId(null), HIGHLIGHT_MS);
+    return () => window.clearTimeout(timer);
+  }, [highlightId]);
+
+  const openQuote = useCallback(
+    async (messageId: string) => {
+      setJumpTo(messageId);
+      if (messages.some(({ id }) => id === messageId)) return;
+      const found = await thread.loadUntil(messageId).catch(() => false);
+      if (!found) {
+        setJumpTo(null);
+        toast.error("Couldn't find the original message.");
+      }
+    },
+    [messages, thread, toast],
+  );
+
+  // The composer grows with a quote bar or a long draft, which shrinks this list. Whoever was
+  // reading the latest message keeps it in view rather than having it slide under the composer.
+  useEffect(() => {
+    const element = scroller.current;
+    if (!element || typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(() => {
+      if (isAtBottom.current) element.scrollTop = element.scrollHeight;
+    });
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
 
   const readIfVisible = useCallback(() => {
     if (latestId && isMember && isAtBottom.current && document.visibilityState === 'visible') {
@@ -250,6 +304,9 @@ const MessageList: React.FC<MessageListProps> = ({
                     canDelete={isMine || can('deleteAnyMessage')}
                     onEdit={(body) => onEdit(message, body)}
                     onDelete={() => onDelete(message)}
+                    onReply={canReply ? () => onReply(message) : undefined}
+                    onOpenQuote={openQuote}
+                    isHighlighted={highlightId === message.id}
                   />
                 </React.Fragment>
               );
@@ -300,6 +357,8 @@ function readOnlyNote(conversation: Conversation): string {
 }
 
 interface ThreadPaneProps extends Omit<MessageListProps, 'conversation' | 'isMember'> {
+  replyTarget: ReplyQuote | null;
+  onCancelReply: () => void;
   conversation: Conversation;
   isMember: boolean;
   isReconnecting: boolean;
@@ -319,6 +378,8 @@ export const ThreadPane: React.FC<ThreadPaneProps> = ({
   onSend,
   onJoin,
   onOpenDetails,
+  replyTarget,
+  onCancelReply,
   ...list
 }) => {
   const { thread } = list;
@@ -391,6 +452,8 @@ export const ThreadPane: React.FC<ThreadPaneProps> = ({
           initialDraft={draft}
           onDraftChange={onDraftChange}
           onSend={onSend}
+          replyTo={replyTarget}
+          onCancelReply={onCancelReply}
         />
       ) : (
         <Notice>{readOnlyNote(conversation)}</Notice>

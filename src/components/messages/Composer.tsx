@@ -1,5 +1,5 @@
 import React, { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
-import { Conversation, MAX_MESSAGE_LENGTH, Named } from '../../api/types';
+import { Conversation, MAX_MESSAGE_LENGTH, Named, ReplyQuote } from '../../api/types';
 import { searchDirectory } from '../../api/users';
 import { useSession } from '../../context/AuthContext';
 import { conversationTitle, Draft, toBody } from '../../lib/messages';
@@ -63,6 +63,9 @@ interface ComposerProps {
   initialDraft: Draft;
   onDraftChange: (draft: Draft) => void;
   onSend: (body: string) => void;
+  /** The message being replied to, shown above the text box until sent or cancelled. */
+  replyTo: ReplyQuote | null;
+  onCancelReply: () => void;
 }
 
 export const Composer: React.FC<ComposerProps> = ({
@@ -70,6 +73,8 @@ export const Composer: React.FC<ComposerProps> = ({
   initialDraft,
   onDraftChange,
   onSend,
+  replyTo,
+  onCancelReply,
 }) => {
   const listId = useId();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -105,6 +110,11 @@ export const Composer: React.FC<ComposerProps> = ({
   }, []);
 
   useEffect(() => setActiveIndex(0), [mention?.query]);
+
+  // Choosing Reply puts you straight into the text box.
+  useEffect(() => {
+    if (replyTo) textareaRef.current?.focus();
+  }, [replyTo?.id]);
 
   const update = (next: string, caret: number) => {
     setText(next);
@@ -168,6 +178,12 @@ export const Composer: React.FC<ComposerProps> = ({
       }
     }
 
+    if (e.key === 'Escape' && replyTo) {
+      e.preventDefault();
+      onCancelReply();
+      return;
+    }
+
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       submit();
@@ -210,6 +226,22 @@ export const Composer: React.FC<ComposerProps> = ({
       )}
 
       <div className="rounded-lg border border-border-strong bg-surface focus-within:border-brand">
+        {replyTo && (
+          <div
+            role="status"
+            className="flex items-start gap-2 mx-2 mt-2 pl-3 pr-1 py-1.5 rounded-md bg-surface-2 border-l-2 border-brand"
+          >
+            <span className="min-w-0 grow text-small">
+              <span className="block font-semibold truncate">Replying to {replyTo.author.name}</span>
+              <span className="block truncate text-text-2">
+                {replyTo.deletedAt
+                  ? 'Original message deleted'
+                  : (replyTo.bodyPreview ?? (replyTo.attachmentKind === 'VOICE' ? 'Voice note' : 'Photo'))}
+              </span>
+            </span>
+            <IconButton icon="close" size="sm" label="Cancel reply" onClick={onCancelReply} />
+          </div>
+        )}
         <textarea
           ref={textareaRef}
           value={text}
