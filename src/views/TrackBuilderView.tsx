@@ -6,6 +6,7 @@ import {
   addSkill,
   getTrack,
   ItemFields,
+  listCourses,
   renameModule,
   renameSkill,
   reorderTrack,
@@ -20,7 +21,9 @@ import {
   TrackItemType,
   TrackModule,
   TrackStatus,
+  SubmissionMode,
 } from '../api/types';
+import { MODES, useProjectOptions } from '../components/learning/programs/ProgramForms';
 import { EnrollDialog } from '../components/learning/EnrollDialog';
 import { ErrorState, LoadingState, NoAccess } from '../components/ui/AsyncState';
 import { Banner } from '../components/ui/Banner';
@@ -37,7 +40,7 @@ import { Textarea } from '../components/ui/Textarea';
 import { PlacementFields, PlacementValue } from '../components/users/PlacementFields';
 import { useSession } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
-import { moveModule, nudgeItem, OrderedModule, orderOf, placeItem } from '../lib/learning';
+import { ITEM_TYPE_ICONS, ITEM_TYPE_LABELS, moveModule, nudgeItem, OrderedModule, orderOf, placeItem } from '../lib/learning';
 import { Link } from '../lib/router';
 import { useDetailTitle } from '../lib/pageTitle';
 import { useApiQuery } from '../lib/useApiQuery';
@@ -51,6 +54,8 @@ const STATUS_LABEL: Record<TrackStatus, string> = {
 const TYPE_OPTIONS = [
   { value: 'RESOURCE', label: 'Resource: read or watch, then mark as done' },
   { value: 'ASSIGNMENT', label: 'Assignment: submit work for review' },
+  { value: 'COURSE', label: 'Course: one from the course library' },
+  { value: 'BUILD', label: 'Build: a project, reviewed with code and live links' },
 ];
 
 const isHttps = (url: string) => {
@@ -73,8 +78,10 @@ const DetailsCard: React.FC<{
     departmentId: track.department?.id ?? '',
     positionId: track.position?.id ?? '',
   });
+  const [lockBuild, setLockBuild] = useState(track.lockBuildUntilLearningDone);
   const [titleError, setTitleError] = useState<string>();
   const [isSaving, setIsSaving] = useState(false);
+  const hasBuild = track.modules.some(({ items }) => items.some(({ type }) => type === 'BUILD'));
 
   const save = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -91,6 +98,7 @@ const DetailsCard: React.FC<{
           description: description.trim(),
           departmentId: placement.departmentId || null,
           positionId: placement.positionId || null,
+          lockBuildUntilLearningDone: lockBuild,
         }),
       );
       toast.success('Track saved.');
@@ -120,6 +128,13 @@ const DetailsCard: React.FC<{
             onChange={(e) => setDescription(e.target.value)}
           />
           <PlacementFields value={placement} onChange={setPlacement} user={track} />
+          {hasBuild && (
+            <Checkbox
+              label="Lock builds until the learning before them is done"
+              checked={lockBuild}
+              onChange={(e) => setLockBuild(e.target.checked)}
+            />
+          )}
         </fieldset>
         {canEdit && (
           <Button type="submit" variant="secondary" isLoading={isSaving}>
@@ -228,26 +243,49 @@ const ItemFormPanel: React.FC<{
   const [minutes, setMinutes] = useState(item?.estimatedMinutes?.toString() ?? '');
   const [dueDay, setDueDay] = useState(item?.dueDay?.toString() ?? '');
   const [skillIds, setSkillIds] = useState(item?.skillIds ?? []);
-  const [errors, setErrors] = useState<{ title?: string; url?: string }>({});
+  const [courseId, setCourseId] = useState(item?.courseId ?? '');
+  const [projectId, setProjectId] = useState(item?.projectId ?? '');
+  const [brief, setBrief] = useState(item?.brief ?? '');
+  const [deliverables, setDeliverables] = useState(item?.deliverables ?? '');
+  const [mode, setMode] = useState<SubmissionMode>(item?.submissionMode ?? 'INDIVIDUAL');
+  const [errors, setErrors] = useState<{ title?: string; url?: string; course?: string }>({});
+  const isCourse = type === 'COURSE';
+  const isBuild = type === 'BUILD';
+  const courses = useApiQuery((signal) => listCourses({}, signal), [], 'courses:all');
+  const projectOptions = useProjectOptions();
+  const courseOptions = [
+    { value: '', label: 'Choose a course' },
+    ...(courses.data ?? []).map(({ id, title }) => ({ value: id, label: title })),
+  ];
   const [isSaving, setIsSaving] = useState(false);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     const url = resourceUrl.trim();
+    const course = courses.data?.find(({ id }) => id === courseId);
     const problems = {
-      title: title.trim() ? undefined : 'Give it a title.',
+      // A course item takes the course's title unless it's given another.
+      title: title.trim() || (isCourse && course) ? undefined : 'Give it a title.',
       url: url && !isHttps(url) ? 'Use a full https link.' : undefined,
+      course: isCourse && !courseId ? 'Choose a course.' : undefined,
     };
     setErrors(problems);
-    if (problems.title || problems.url) return;
+    if (problems.title || problems.url || problems.course) return;
 
     const fields: ItemFields = {
-      title: title.trim(),
+      title: title.trim() || course!.title,
       instructions: instructions.trim(),
       resourceUrl: url || null,
       estimatedMinutes: minutes ? Number(minutes) : null,
       dueDay: dueDay ? Number(dueDay) : null,
       skillIds,
+      ...(isCourse && { courseId }),
+      ...(isBuild && {
+        projectId: projectId || null,
+        brief: brief.trim(),
+        deliverables: deliverables.trim(),
+        submissionMode: mode,
+      }),
     };
     setIsSaving(true);
     try {
@@ -280,7 +318,38 @@ const ItemFormPanel: React.FC<{
             onChange={(e) => setType(e.target.value as TrackItemType)}
           />
         )}
-        <Input label="Title" value={title} error={errors.title} onChange={(e) => setTitle(e.target.value)} />
+        {isCourse && (
+          <Select
+            label="Course"
+            value={courseId}
+            options={courseOptions}
+            error={errors.course}
+            helperText="Learners finish it once and it counts on every track that has it."
+            onChange={(e) => setCourseId(e.target.value)}
+          />
+        )}
+        <Input
+          label="Title"
+          optional={isCourse}
+          helperText={isCourse ? "Leave it empty to use the course's title." : undefined}
+          value={title}
+          error={errors.title}
+          onChange={(e) => setTitle(e.target.value)}
+        />
+        {isBuild && (
+          <>
+            <Textarea label="What to build" optional rows={4} value={brief} onChange={(e) => setBrief(e.target.value)} />
+            <Textarea
+              label="Deliverables"
+              optional
+              rows={3}
+              value={deliverables}
+              onChange={(e) => setDeliverables(e.target.value)}
+            />
+            <Select label="Project" optional value={projectId} options={projectOptions} onChange={(e) => setProjectId(e.target.value)} />
+            <Select label="Builds" value={mode} options={MODES} onChange={(e) => setMode(e.target.value as SubmissionMode)} />
+          </>
+        )}
         <Textarea
           label="Instructions"
           optional
@@ -431,7 +500,7 @@ const ModuleCard: React.FC<ModuleCardProps> = ({
             } ${targetId === item.id ? 'is-target' : ''} ${canEdit ? 'cursor-grab' : ''}`}
           >
             <Icon
-              name={item.type === 'RESOURCE' ? 'description' : 'edit_note'}
+              name={ITEM_TYPE_ICONS[item.type]}
               size="sm"
               className="text-text-2"
             />
@@ -441,7 +510,7 @@ const ModuleCard: React.FC<ModuleCardProps> = ({
                 {item.title}
               </span>
               <span className="block text-small text-text-2">
-                {item.type === 'RESOURCE' ? 'Resource' : 'Assignment'}
+                {ITEM_TYPE_LABELS[item.type]}
                 {item.dueDay !== null && ` · Day ${item.dueDay}`}
                 {item.isArchived && ' · Archived'}
               </span>

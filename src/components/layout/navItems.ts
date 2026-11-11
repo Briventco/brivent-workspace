@@ -1,7 +1,5 @@
 import { useSession } from '../../context/AuthContext';
-import { listEnrollments } from '../../api/learning';
 import { Action } from '../../lib/permissions';
-import { useApiQuery } from '../../lib/useApiQuery';
 import { IconName } from '../ui/Icon';
 
 export interface NavItem {
@@ -56,14 +54,8 @@ const SETTINGS: NavItem = { to: '/settings', label: 'Settings', icon: 'settings'
 /** Administration only shows for people who can manage users. Everyone else gets Account. */
 export function useNavSections(): NavSection[] {
   const { can } = useSession();
-  const canBuild = can('createTrack');
-  const enrollments = useApiQuery(
-    (signal) =>
-      canBuild || !can('viewLearning') ? Promise.resolve([]) : listEnrollments('mine', {}, signal),
-    [canBuild],
-    'learning:mine:nav',
-  );
-  const showLearning = canBuild || (enrollments.data?.length ?? 0) > 0;
+  // The course library is open to everyone who can learn, so Learning shows for all of them.
+  const showLearning = can('viewLearning');
 
   const last: NavSection = can('viewUsers')
     ? { title: 'Administration', items: [USERS, DEPARTMENTS, SETTINGS] }

@@ -7,7 +7,9 @@ import { DepartmentsView } from './views/DepartmentsView';
 import { DirectoryView } from './views/DirectoryView';
 import { DocumentsView } from './views/DocumentsView';
 import { ForgotPasswordView } from './views/ForgotPasswordView';
+import { CourseView } from './views/CourseView';
 import { EnrollmentView } from './views/EnrollmentView';
+import { ProgramView } from './views/ProgramView';
 import { LearningView } from './views/LearningView';
 import { MessagesView } from './views/MessagesView';
 import { MoreView } from './views/MoreView';
@@ -120,6 +122,22 @@ export function resolveRoute(pathname: string): AppRoute | undefined {
     return {
       title: 'Learning',
       element: <EnrollmentView key={enrollmentId} enrollmentId={enrollmentId} />,
+      action: 'viewLearning',
+    };
+  }
+  const courseId = pathname.match(/^\/learning\/courses\/([^/]+)$/)?.[1];
+  if (courseId) {
+    return {
+      title: 'Course',
+      element: <CourseView key={courseId} courseId={courseId} />,
+      action: 'viewLearning',
+    };
+  }
+  const programId = pathname.match(/^\/learning\/programs\/([^/]+)$/)?.[1];
+  if (programId) {
+    return {
+      title: 'Program',
+      element: <ProgramView key={programId} programId={programId} />,
       action: 'viewLearning',
     };
   }

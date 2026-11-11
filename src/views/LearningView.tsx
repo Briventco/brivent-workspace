@@ -1,7 +1,10 @@
 import React, { useState } from 'react';
 import { errorMessage } from '../api/client';
 import { createTrack, getEnrollment, listEnrollments, listReviews, listTracks } from '../api/learning';
-import { Enrollment, LearningHealth, ReviewRequest, TrackStatus } from '../api/types';
+import { Enrollment, LearningHealth, ReviewQueueEntry, ReviewRequest, TrackStatus } from '../api/types';
+import { CourseLibrary, MyCourses } from '../components/learning/courses/CourseLibrary';
+import { CourseProofPanel } from '../components/learning/courses/CourseProofPanel';
+import { Programs } from '../components/learning/programs/Programs';
 import { EnrollDialog } from '../components/learning/EnrollDialog';
 import { ItemPanel } from '../components/learning/ItemPanel';
 import { EnrollmentCard, HealthBadge } from '../components/learning/LearningParts';
@@ -24,7 +27,7 @@ import { useApiQuery } from '../lib/useApiQuery';
 import { useMediaQuery } from '../lib/useMediaQuery';
 import { formatDayMonth, formatDateTime } from '../lib/wat';
 
-type Tab = 'mine' | 'reviews' | 'learners' | 'all' | 'tracks';
+type Tab = 'mine' | 'courses' | 'programs' | 'reviews' | 'learners' | 'all' | 'tracks';
 
 const TRACK_STATUS: Record<TrackStatus, string> = {
   DRAFT: 'Draft',
@@ -47,19 +50,29 @@ const MyLearning: React.FC<{ query: ReturnType<typeof useApiQuery<Enrollment[]>>
     errorTitle="Couldn't load your learning"
     isEmpty={(enrollments) => enrollments.length === 0}
     empty={
-      <EmptyState
-        icon="fact_check"
-        title="No learning yet"
-        description="When you're enrolled on a track, it shows up here."
-      />
+      <>
+        <EmptyState
+          icon="fact_check"
+          title="No learning yet"
+          description="When you're enrolled on a track, it shows up here. You can start any course in the library."
+        >
+          <Link to="/learning?tab=courses" className="btn btn-secondary">
+            Browse courses
+          </Link>
+        </EmptyState>
+        <MyCourses />
+      </>
     }
   >
     {(enrollments) => (
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {enrollments.map((enrollment) => (
-          <EnrollmentCard key={enrollment.id} enrollment={enrollment} />
-        ))}
-      </div>
+      <>
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {enrollments.map((enrollment) => (
+            <EnrollmentCard key={enrollment.id} enrollment={enrollment} />
+          ))}
+        </div>
+        <MyCourses />
+      </>
     )}
   </AsyncState>
 );
@@ -101,7 +114,14 @@ const ReviewPanel: React.FC<{
 
 const ReviewQueue: React.FC = () => {
   const query = useApiQuery((signal) => listReviews(signal), [], 'learning:reviews');
-  const [opened, setOpened] = useState<ReviewRequest | null>(null);
+  const [opened, setOpened] = useState<ReviewQueueEntry | null>(null);
+  const keyOf = (entry: ReviewQueueEntry) =>
+    entry.kind === 'COURSE_PROOF' ? `${entry.learner.id}:${entry.course.id}` : entry.id;
+  const titleOf = (entry: ReviewQueueEntry) => (entry.kind === 'COURSE_PROOF' ? entry.course.title : entry.item.title);
+  const contextOf = (entry: ReviewQueueEntry) =>
+    entry.kind === 'COURSE_PROOF'
+      ? `Course proof · ${entry.course.provider}`
+      : `${entry.kind === 'BUILD' ? (entry.isTeamSubmission ? 'Team build' : 'Build') : 'Assignment'} · ${entry.track.title}`;
 
   return (
     <>
@@ -121,7 +141,7 @@ const ReviewQueue: React.FC = () => {
         {(requests) => (
           <ul className="card divide-y divide-border">
             {requests.map((request) => (
-              <li key={request.id}>
+              <li key={keyOf(request)}>
                 <button
                   type="button"
                   onClick={() => setOpened(request)}
@@ -129,9 +149,9 @@ const ReviewQueue: React.FC = () => {
                 >
                   <Avatar name={request.learner.name} id={request.learner.id} avatar={request.learner.avatar} />
                   <span className="min-w-0 grow">
-                    <span className="block font-semibold truncate">{request.item.title}</span>
+                    <span className="block font-semibold truncate">{titleOf(request)}</span>
                     <span className="block text-small text-text-2 truncate">
-                      {request.learner.name} · {request.track.title}
+                      {request.learner.name} · {contextOf(request)}
                     </span>
                   </span>
                   <span className="hidden sm:block text-small text-text-2 whitespace-nowrap">
@@ -144,7 +164,17 @@ const ReviewQueue: React.FC = () => {
         )}
       </AsyncState>
 
-      {opened && (
+      {opened?.kind === 'COURSE_PROOF' && (
+        <CourseProofPanel
+          request={opened}
+          onClose={() => setOpened(null)}
+          onDone={() => {
+            setOpened(null);
+            query.reload();
+          }}
+        />
+      )}
+      {opened && opened.kind !== 'COURSE_PROOF' && (
         <ReviewPanel
           request={opened}
           onClose={() => setOpened(null)}
@@ -401,7 +431,9 @@ export const LearningView: React.FC = () => {
   const mine = useApiQuery((signal) => listEnrollments('mine', {}, signal), [], 'learning:mine');
   const hasOwn = (mine.data?.length ?? 0) > 0;
   const showMine = !isReviewer || hasOwn;
+  const inProgram = Boolean(mine.data?.some(({ cohort }) => cohort));
 
+  // Reviewers land on their queue; learners on their own learning. The library is for everyone.
   const tabs: { value: Tab; label: string }[] = [
     ...(showMine ? [{ value: 'mine' as const, label: 'My learning' }] : []),
     ...(isReviewer
@@ -412,6 +444,8 @@ export const LearningView: React.FC = () => {
           { value: 'tracks' as const, label: 'Tracks' },
         ]
       : []),
+    ...(isReviewer || inProgram ? [{ value: 'programs' as const, label: 'Programs' }] : []),
+    { value: 'courses' as const, label: 'Courses' },
   ];
 
   const requested = new URLSearchParams(search).get('tab') as Tab | null;
@@ -425,7 +459,7 @@ export const LearningView: React.FC = () => {
     <>
       <PageHeader
         title="Learning"
-        description="Structured tracks with mentor reviews."
+        description="Courses to learn from, tracks with mentor reviews, and programs that end in a real build."
         actions={
           isReviewer && (
             <div className="flex gap-2">
@@ -453,6 +487,8 @@ export const LearningView: React.FC = () => {
 
       <div key={refreshKey}>
         {tab === 'mine' && <MyLearning query={mine} />}
+        {tab === 'courses' && <CourseLibrary />}
+        {tab === 'programs' && <Programs />}
         {tab === 'reviews' && <ReviewQueue />}
         {tab === 'learners' && <Learners scope="mentoring" tab="learners" />}
         {tab === 'all' && <Learners scope="all" tab="all" />}
