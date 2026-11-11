@@ -6,6 +6,8 @@ import { Link } from '../../lib/router';
 import { formatTime } from '../../lib/wat';
 import { AssigneeStack } from '../tasks/AssigneeStack';
 import { Avatar } from '../ui/Avatar';
+import { PhotoGrid } from './media/PhotoGrid';
+import { VoicePlayer } from './media/VoicePlayer';
 import { StatusBadge } from '../ui/badges';
 import { Button, IconButton } from '../ui/Button';
 import { Icon } from '../ui/Icon';
@@ -81,7 +83,7 @@ const EditForm: React.FC<{
 
   const save = async () => {
     const trimmed = text.trim();
-    if (!trimmed || isSaving) return;
+    if ((!trimmed && message.attachments.length === 0) || isSaving) return;
     setIsSaving(true);
     try {
       await onSave(toBody({ text: trimmed, mentions: draft.mentions }));
@@ -111,7 +113,12 @@ const EditForm: React.FC<{
         }}
       />
       <div className="flex gap-2 mt-2">
-        <Button size="sm" onClick={save} isLoading={isSaving} disabled={!text.trim()}>
+        <Button
+          size="sm"
+          onClick={save}
+          isLoading={isSaving}
+          disabled={!text.trim() && message.attachments.length === 0}
+        >
           Save
         </Button>
         <Button size="sm" variant="ghost" onClick={onCancel} disabled={isSaving}>
@@ -181,6 +188,8 @@ interface MessageItemProps {
   /** Left out where replying isn't possible, like a channel you haven't joined. */
   onReply?: () => void;
   onOpenQuote: (messageId: string) => void;
+  /** A photo or recording failed to load, most likely because its signed address ran out. */
+  onMediaExpired: () => void;
   isHighlighted: boolean;
 }
 
@@ -193,6 +202,7 @@ export const MessageItem: React.FC<MessageItemProps> = ({
   onDelete,
   onReply,
   onOpenQuote,
+  onMediaExpired,
   isHighlighted,
 }) => {
   const [isEditing, setIsEditing] = useState(false);
@@ -208,6 +218,8 @@ export const MessageItem: React.FC<MessageItemProps> = ({
   );
 
   const canReply = Boolean(onReply) && !isDeleted;
+  const photos = message.attachments.filter(({ kind }) => kind === 'IMAGE');
+  const voice = message.attachments.find(({ kind }) => kind === 'VOICE');
 
   // Phones: swipe right to reply, or hold to bring up the actions, as a tap also does.
   const handleTouchStart = (e: React.TouchEvent) => {
@@ -290,6 +302,10 @@ export const MessageItem: React.FC<MessageItemProps> = ({
           />
         ) : (
           <>
+            {photos.length > 0 && (
+              <PhotoGrid photos={photos} author={author.name} onExpired={onMediaExpired} />
+            )}
+            {voice && <VoicePlayer voice={voice} onExpired={onMediaExpired} />}
             {parts.length > 0 ? <MessageText parts={parts}>{edited}</MessageText> : edited}
             {linkedTasks.map((task) => (
               <TaskCard key={task.id} task={task} />

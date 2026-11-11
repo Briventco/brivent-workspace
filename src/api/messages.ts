@@ -1,5 +1,5 @@
-import { request } from './client';
-import { Conversation, Message } from './types';
+import { request, uploadForm } from './client';
+import { Attachment, AttachmentKind, Conversation, Message } from './types';
 
 export interface MessagePage {
   messages: Message[];
@@ -90,11 +90,39 @@ export function sendMessage(
   body: string,
   clientId: string,
   replyToId?: string,
+  attachmentIds: string[] = [],
 ): Promise<Message> {
   return request<{ message: Message }>(`/conversations/${conversationId}/messages`, {
     method: 'POST',
-    body: { body, clientId, ...(replyToId && { replyToId }) },
+    body: {
+      body,
+      clientId,
+      ...(replyToId && { replyToId }),
+      ...(attachmentIds.length > 0 && { attachmentIds }),
+    },
   }).then(toMessage);
+}
+
+/**
+ * Step one of sending a photo or voice note: upload it, then send the message with its id.
+ * Voice notes are converted before this answers, which takes a few seconds.
+ */
+export async function uploadAttachment(
+  conversationId: string,
+  kind: AttachmentKind,
+  file: Blob,
+  fileName: string,
+  onProgress?: (fraction: number) => void,
+): Promise<Attachment> {
+  const form = new FormData();
+  form.append('kind', kind);
+  form.append('file', file, fileName);
+  const data = await uploadForm<{ attachment: Attachment }>(
+    `/conversations/${conversationId}/attachments`,
+    form,
+    { method: 'POST', onProgress },
+  );
+  return data.attachment;
 }
 
 export function editMessage(id: string, body: string): Promise<Message> {

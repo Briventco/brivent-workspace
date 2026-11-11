@@ -1,5 +1,9 @@
 import React, { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
-import { Conversation, MAX_MESSAGE_LENGTH, Named, ReplyQuote } from '../../api/types';
+import { Attachment, Conversation, MAX_MESSAGE_LENGTH, Named, ReplyQuote } from '../../api/types';
+import { ImageUploads, PHOTO_TYPES } from '../../lib/useImageUploads';
+import { canRecordVoice, Recording } from '../../lib/useVoiceRecorder';
+import { PhotoTray } from './media/PhotoTray';
+import { VoiceRecorder } from './media/VoiceRecorder';
 import { searchDirectory } from '../../api/users';
 import { useSession } from '../../context/AuthContext';
 import { conversationTitle, Draft, toBody } from '../../lib/messages';
@@ -65,7 +69,10 @@ interface ComposerProps {
   conversation: Conversation;
   initialDraft: Draft;
   onDraftChange: (draft: Draft) => void;
-  onSend: (body: string) => void;
+  onSend: (body: string, attachments: Attachment[]) => void;
+  onSendVoice: (recording: Recording) => void;
+  /** Photos waiting to go with the next message. Held by the pane, so a drop anywhere adds them. */
+  uploads: ImageUploads;
   /** The message being replied to, shown above the text box until sent or cancelled. */
   replyTo: ReplyQuote | null;
   onCancelReply: () => void;
@@ -76,9 +83,14 @@ export const Composer: React.FC<ComposerProps> = ({
   initialDraft,
   onDraftChange,
   onSend,
+  onSendVoice,
+  uploads,
   replyTo,
   onCancelReply,
 }) => {
+  const fileInput = useRef<HTMLInputElement>(null);
+  const [photoProblem, setPhotoProblem] = useState<string | null>(null);
+  const [isRecording, setIsRecording] = useState(false);
   const listId = useId();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [text, setText] = useState(initialDraft.text);
@@ -150,9 +162,17 @@ export const Composer: React.FC<ComposerProps> = ({
     textarea.focus();
   };
 
+  const hasPhotos = uploads.uploads.length > 0;
+  const canSend = (Boolean(text.trim()) || hasPhotos) && !uploads.isBusy && !isTooLong;
+  const showsMic = canRecordVoice() && !text.trim() && !hasPhotos;
+
+  const addPhotos = (files: File[]) => setPhotoProblem(uploads.add(files));
+
   const submit = () => {
-    if (!text.trim() || isTooLong) return;
-    onSend(body);
+    if (!canSend) return;
+    onSend(body, uploads.attachments);
+    uploads.clear();
+    setPhotoProblem(null);
     mentions.current = [];
     setText('');
     setMention(null);
@@ -239,14 +259,28 @@ export const Composer: React.FC<ComposerProps> = ({
               <span className="block truncate text-text-2">
                 {replyTo.deletedAt
                   ? 'Original message deleted'
-                  : (replyTo.bodyPreview ?? (replyTo.attachmentKind === 'VOICE' ? 'Voice note' : 'Photo'))}
+                  : replyTo.bodyPreview ||
+                    (replyTo.attachmentKind === 'VOICE' ? 'Voice note' : 'Photo')}
               </span>
             </span>
             <IconButton icon="close" size="sm" label="Cancel reply" onClick={onCancelReply} />
           </div>
         )}
+        {hasPhotos && <PhotoTray uploads={uploads} />}
+        {photoProblem && (
+          <p role="alert" className="mx-3 mt-2 text-small text-danger">
+            {photoProblem}
+          </p>
+        )}
         <textarea
           ref={textareaRef}
+          hidden={isRecording}
+          onPaste={(e) => {
+            const images = [...e.clipboardData.files].filter((file) => file.type.startsWith('image/'));
+            if (images.length === 0) return;
+            e.preventDefault();
+            addPhotos(images);
+          }}
           value={text}
           rows={1}
           role="combobox"
@@ -262,9 +296,32 @@ export const Composer: React.FC<ComposerProps> = ({
           className="composer-input block w-full resize-none bg-transparent border-0 px-3 pt-2.5 pb-1 text-body text-text placeholder:text-text-3"
         />
         <div className="flex items-center gap-2 px-2 pb-2">
-          <IconButton icon="alternate_email" size="sm" label="Mention someone" onClick={startMention} />
-          <span className="grow" />
-          {isTooLong ? (
+          {!isRecording && (
+            <>
+              <IconButton
+                icon="attach_file"
+                size="sm"
+                label="Attach photos"
+                onClick={() => fileInput.current?.click()}
+              />
+              <input
+                ref={fileInput}
+                type="file"
+                accept={PHOTO_TYPES.join(',')}
+                multiple
+                className="sr-only"
+                tabIndex={-1}
+                aria-label="Choose photos to attach"
+                onChange={(e) => {
+                  addPhotos([...(e.target.files ?? [])]);
+                  e.target.value = '';
+                }}
+              />
+              <IconButton icon="alternate_email" size="sm" label="Mention someone" onClick={startMention} />
+            </>
+          )}
+          <span className={isRecording ? 'hidden' : 'grow'} />
+          {isRecording ? null : isTooLong ? (
             <span role="alert" className="text-caption text-danger">
               That's over the {MAX_MESSAGE_LENGTH.toLocaleString('en-US')} character limit.
             </span>
@@ -273,9 +330,14 @@ export const Composer: React.FC<ComposerProps> = ({
               Enter to send · Shift Enter for a new line
             </span>
           )}
-          <Button size="sm" icon="send" onClick={submit} disabled={!text.trim() || isTooLong}>
-            Send
-          </Button>
+          {(showsMic || isRecording) && (
+            <VoiceRecorder onSend={onSendVoice} onActiveChange={setIsRecording} />
+          )}
+          {!showsMic && !isRecording && (
+            <Button size="sm" icon="send" onClick={submit} disabled={!canSend}>
+              Send
+            </Button>
+          )}
         </div>
       </div>
     </div>

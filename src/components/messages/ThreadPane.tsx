@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { errorMessage } from '../../api/client';
-import { Conversation, Message, ReplyQuote } from '../../api/types';
+import { Attachment, Conversation, Message, ReplyQuote } from '../../api/types';
 import { useSession } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
 import { PendingMessage } from '../../context/RealtimeContext';
@@ -25,6 +25,9 @@ import { Skeleton } from '../ui/Skeleton';
 import { Spinner } from '../ui/Spinner';
 import { Composer } from './Composer';
 import { ConversationIcon } from './ConversationList';
+import { useImageUploads } from '../../lib/useImageUploads';
+import { Recording } from '../../lib/useVoiceRecorder';
+import { PhotoGrid } from './media/PhotoGrid';
 import { MessageItem, MessageText, ReplyQuote as QuoteView } from './MessageItem';
 
 const NEAR_EDGE_PX = 120;
@@ -57,15 +60,24 @@ const PendingItem: React.FC<{
       <div className="grow min-w-0">
         <p className="flex items-baseline gap-2">
           <span className="font-semibold truncate">{user.fullName}</span>
-          {!item.error && <span className="text-caption text-text-2">Sending…</span>}
+          {!item.error && !item.voice && <span className="text-caption text-text-2">Sending…</span>}
         </p>
         {item.replyTo && <QuoteView quote={item.replyTo} />}
-        <MessageText parts={bodyParts(item.body, [], [])} />
+        {item.attachments.length > 0 && (
+          <PhotoGrid photos={item.attachments} author={user.fullName} onExpired={() => {}} />
+        )}
+        {item.voice && !item.error && (
+          <p role="status" className="flex items-center gap-2 text-small text-text-2">
+            <Spinner size="sm" />
+            {item.voice.uploaded ? 'Sending voice note…' : 'Processing voice note…'}
+          </p>
+        )}
+        {item.body && <MessageText parts={bodyParts(item.body, [], [])} />}
         {item.error && (
           <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
             <span role="alert" className="flex items-center gap-1 text-small text-danger">
               <Icon name="sms_failed" size="sm" />
-              Message didn't send. {item.error}
+              {item.voice ? "Voice note didn't send." : "Message didn't send."} {item.error}
             </span>
             <Button size="sm" variant="secondary" icon="refresh" onClick={onResend}>
               Resend
@@ -191,6 +203,15 @@ const MessageList: React.FC<MessageListProps> = ({
     return () => window.clearTimeout(timer);
   }, [highlightId]);
 
+  const lastRefresh = useRef(0);
+  const refreshExpiredMedia = useCallback(() => {
+    // A broken image or recording usually means its signed address ran out after an hour. One
+    // refetch brings fresh ones. Spaced out, so a file that's truly gone can't cause a loop.
+    if (Date.now() - lastRefresh.current < 30_000) return;
+    lastRefresh.current = Date.now();
+    thread.refetch();
+  }, [thread]);
+
   const openQuote = useCallback(
     async (messageId: string) => {
       setJumpTo(messageId);
@@ -306,6 +327,7 @@ const MessageList: React.FC<MessageListProps> = ({
                     onDelete={() => onDelete(message)}
                     onReply={canReply ? () => onReply(message) : undefined}
                     onOpenQuote={openQuote}
+                    onMediaExpired={refreshExpiredMedia}
                     isHighlighted={highlightId === message.id}
                   />
                 </React.Fragment>
@@ -357,6 +379,7 @@ function readOnlyNote(conversation: Conversation): string {
 }
 
 interface ThreadPaneProps extends Omit<MessageListProps, 'conversation' | 'isMember'> {
+  onSendVoice: (recording: Recording) => void;
   replyTarget: ReplyQuote | null;
   onCancelReply: () => void;
   conversation: Conversation;
@@ -364,7 +387,7 @@ interface ThreadPaneProps extends Omit<MessageListProps, 'conversation' | 'isMem
   isReconnecting: boolean;
   draft: Draft;
   onDraftChange: (draft: Draft) => void;
-  onSend: (body: string) => void;
+  onSend: (body: string, attachments: Attachment[]) => void;
   onJoin: () => Promise<void>;
   onOpenDetails: () => void;
 }
@@ -380,10 +403,15 @@ export const ThreadPane: React.FC<ThreadPaneProps> = ({
   onOpenDetails,
   replyTarget,
   onCancelReply,
+  onSendVoice,
   ...list
 }) => {
   const { thread } = list;
   const [isJoining, setIsJoining] = useState(false);
+  const uploads = useImageUploads(conversation.id);
+  const [isDropping, setIsDropping] = useState(false);
+  const canAttach = isMember && conversation.canPost;
+  const hasFiles = (e: React.DragEvent) => e.dataTransfer.types.includes('Files');
   const name = conversationName(conversation);
   const subtitle =
     conversation.kind === 'DM' ? conversation.otherUser?.position?.name : conversation.description;
@@ -394,7 +422,30 @@ export const ThreadPane: React.FC<ThreadPaneProps> = ({
   };
 
   return (
-    <>
+    <div
+      className="contents"
+      onDragEnter={(e) => canAttach && hasFiles(e) && setIsDropping(true)}
+      onDragOver={(e) => {
+        if (!canAttach || !hasFiles(e)) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'copy';
+      }}
+      onDragLeave={(e) => {
+        if (!e.currentTarget.parentElement?.contains(e.relatedTarget as Node)) setIsDropping(false);
+      }}
+      onDrop={(e) => {
+        if (!canAttach || !hasFiles(e)) return;
+        e.preventDefault();
+        setIsDropping(false);
+        uploads.add([...e.dataTransfer.files].filter((file) => file.type.startsWith('image/') || /\.hei[cf]$/i.test(file.name)));
+      }}
+    >
+      {isDropping && (
+        <div className="drop-overlay" aria-hidden="true">
+          <Icon name="image" size="xl" />
+          Drop photos to attach them
+        </div>
+      )}
       <header className="flex items-center gap-2 min-h-[60px] px-2 md:px-6 py-2 border-b border-border">
         <Link
           to="/messages"
@@ -452,12 +503,14 @@ export const ThreadPane: React.FC<ThreadPaneProps> = ({
           initialDraft={draft}
           onDraftChange={onDraftChange}
           onSend={onSend}
+          onSendVoice={onSendVoice}
+          uploads={uploads}
           replyTo={replyTarget}
           onCancelReply={onCancelReply}
         />
       ) : (
         <Notice>{readOnlyNote(conversation)}</Notice>
       )}
-    </>
+    </div>
   );
 };

@@ -217,6 +217,8 @@ def main():
     throwaway_task = f"{PREFIX} delete me"
 
     with sync_playwright() as playwright:
+        global sync_playwright_instance
+        sync_playwright_instance = playwright
         executable = os.environ.get("E2E_CHROMIUM")
         browser = playwright.chromium.launch(executable_path=executable or None)
         page = new_page(browser)
@@ -242,6 +244,8 @@ def main():
                         run_messages(browser, admin_token)
                         run_replies(browser, admin_token)
                         run_links(browser, admin_token)
+                        if has_attachments(admin_token):
+                            run_attachments(browser, admin_token)
                     if "learning.view" in call("GET", "/me", admin_token)["user"]["permissions"]:
                         run_learning(browser, admin_token)
             run_team_lead(browser, lead_task, lead_name, intern_name)
@@ -3138,6 +3142,398 @@ def run_links(browser, admin_token):
 
     step("links: long links never push a phone sideways", phone)
     page.context.close()
+
+
+FAKE_MIC = ["--use-fake-ui-for-media-stream", "--use-fake-device-for-media-stream"]
+
+
+def photo_file(name, width=640, height=480, shade=0):
+    return {"name": name, "mimeType": "image/png", "buffer": make_png(width, height, shade)}
+
+
+def attach_photos(page, files):
+    page.get_by_label("Choose photos to attach").set_input_files(files)
+
+
+def tray(page):
+    return page.get_by_role("list", name="Photos to send")
+
+
+def mic_browser(browser):
+    """Chrome with a fake microphone, so recordings are real audio without a person speaking."""
+    return browser.browser_type.launch(executable_path=os.environ.get("E2E_CHROMIUM") or None, args=FAKE_MIC)
+
+
+def record_for(page, seconds):
+    expect(page.get_by_role("button", name="Record a voice note")).to_be_visible()
+    page.get_by_role("button", name="Record a voice note").click()
+    # Recording starts once the browser hands over the microphone, which can take a moment.
+    expect(page.get_by_role("timer")).to_be_visible(timeout=15_000)
+    page.wait_for_timeout(int(seconds * 1000))
+    page.get_by_role("button", name="Stop recording").click()
+    expect(page.get_by_role("group", name="Voice note ready to send")).to_be_visible()
+
+
+def has_attachments(token):
+    """The route exists when a bad conversation id is refused as invalid rather than not found."""
+    try:
+        call("POST", "/conversations/not-an-id/attachments", token, {})
+    except urllib.error.HTTPError as error:
+        return error.code != 404
+    return True
+
+
+def run_attachments(browser, admin_token):
+    lead_auth = call("POST", "/auth/login", body=dict(zip(("email", "password"), credentials("TEAM_LEAD"))))
+    intern_auth = call("POST", "/auth/login", body=dict(zip(("email", "password"), credentials("INTERN"))))
+    lead_token, intern_token = lead_auth["token"], intern_auth["token"]
+    channel = call("POST", "/channels", lead_token, {"name": f"e2e-media-{RUN}", "visibility": "PUBLIC"})["conversation"]
+    call("POST", f"/channels/{channel['id']}/join", intern_token)
+    url = f"{APP}/messages/{channel['id']}"
+    label = f"#{channel['name']}"
+
+    sender = new_page(browser)
+    receiver = new_page(browser)
+    log_in(sender, "TEAM_LEAD")
+    log_in(receiver, "INTERN")
+    sender.goto(url)
+    receiver.goto(url)
+
+    def three_photos_with_caption():
+        held = []
+        sender.route("**/attachments", lambda route: held.append(route) if not held else route.continue_())
+        attach_photos(sender, [photo_file(f"p{n}.png", shade=n * 40) for n in range(3)])
+        expect(tray(sender).get_by_role("listitem")).to_have_count(3)
+        expect(tray(sender).get_by_role("progressbar").first).to_be_visible()
+        expect(sender.get_by_role("button", name="Send", exact=True)).to_be_disabled()
+        held[0].continue_()
+        expect(tray(sender).get_by_role("progressbar")).to_have_count(0, timeout=20_000)
+        sender.unroute("**/attachments")
+        expect(sender.get_by_role("button", name="Send", exact=True)).to_be_enabled()
+        with sender.expect_request(lambda r: r.method == "POST" and r.url.endswith("/messages")) as sent:
+            send_message(sender, label, f"{PREFIX} three photos")
+        assert len(sent.value.post_data_json["attachmentIds"]) == 3
+        expect(tray(sender)).to_have_count(0)
+        grid = message_list(receiver).get_by_role("listitem").filter(has_text="three photos").locator(".photo-grid-3")
+        expect(grid.get_by_role("button", name=re.compile("^Open photo"))).to_have_count(3)
+        assert grid.locator("img").first.get_attribute("width"), "photos need their size to hold space"
+
+    step("attachments: photos upload with progress, then send with a caption, live", three_photos_with_caption)
+
+    def photo_only_and_preview():
+        attach_photos(sender, [photo_file("solo.png", 800, 400)])
+        expect(sender.get_by_role("button", name="Send", exact=True)).to_be_enabled(timeout=20_000)
+        sender.get_by_role("button", name="Send", exact=True).click()
+        single = message_list(receiver).locator(".photo-single").last
+        expect(single).to_be_visible()
+        # Held at its own shape. 800 by 400 isn't resized, so that's the ratio it reserves.
+        assert "800 / 400" in single.get_attribute("style"), single.get_attribute("style")
+        receiver.goto(f"{APP}/messages")
+        receiver.set_viewport_size(MOBILE)
+        expect(receiver.get_by_role("link", name=re.compile(re.escape(channel["name"])))).to_contain_text("Photo")
+        receiver.set_viewport_size(LAPTOP)
+        receiver.goto(url)
+
+    step("attachments: a photo needs no caption, and the list says Photo", photo_only_and_preview)
+
+    def paste_drop_and_limits():
+        box = message_box(sender, label)
+        png = list(make_png(64, 64))
+        sender.evaluate(
+            """([bytes]) => {
+              const data = new DataTransfer();
+              data.items.add(new File([new Uint8Array(bytes)], 'pasted.png', { type: 'image/png' }));
+              document.querySelector('textarea').dispatchEvent(new ClipboardEvent('paste', { clipboardData: data, bubbles: true }));
+            }""",
+            [png],
+        )
+        expect(tray(sender).get_by_role("listitem")).to_have_count(1)
+        sender.evaluate(
+            """([bytes]) => {
+              const data = new DataTransfer();
+              data.items.add(new File([new Uint8Array(bytes)], 'dropped.png', { type: 'image/png' }));
+              const target = document.querySelector('[aria-label^="Messages in"]');
+              for (const type of ['dragenter', 'dragover', 'drop']) {
+                target.dispatchEvent(new DragEvent(type, { dataTransfer: data, bubbles: true, cancelable: true }));
+              }
+            }""",
+            [png],
+        )
+        expect(tray(sender).get_by_role("listitem")).to_have_count(2)
+        attach_photos(sender, [photo_file(f"many{n}.png", 32, 32) for n in range(10)])
+        expect(tray(sender).get_by_role("listitem")).to_have_count(10)
+        expect(sender.get_by_role("alert")).to_contain_text("up to 10 photos")
+        for n in range(10):
+            tray(sender).get_by_role("button", name=re.compile("^Remove")).first.click()
+        expect(tray(sender)).to_have_count(0)
+        attach_photos(sender, [{"name": "party.gif", "mimeType": "image/gif", "buffer": b"GIF89a" + b"\0" * 32}])
+        expect(sender.get_by_role("alert")).to_contain_text("GIFs can't be sent")
+        assert box.input_value() == ""
+
+    step("attachments: paste, drop, the limit of 10 and GIF refusals", paste_drop_and_limits)
+
+    def failed_upload_retries():
+        tries = []
+
+        def flaky(route):
+            tries.append(1)
+            if len(tries) == 1:
+                return route.fulfill(status=503, json={"error": {"code": "STORAGE_UNAVAILABLE", "message": "The file couldn't be stored."}})
+            return route.continue_()
+
+        sender.route("**/attachments", flaky)
+        attach_photos(sender, [photo_file("flaky.png")])
+        retry = tray(sender).get_by_role("button", name=re.compile("^Retry"))
+        expect(retry).to_be_visible()
+        expect(sender.get_by_role("button", name="Send", exact=True)).to_be_disabled()
+        retry.click()
+        expect(retry).to_have_count(0)
+        expect(sender.get_by_role("button", name="Send", exact=True)).to_be_enabled(timeout=20_000)
+        sender.unroute("**/attachments")
+        tray(sender).get_by_role("button", name=re.compile("^Remove")).click()
+
+    step("attachments: a failed upload shows Retry, and Send waits for it", failed_upload_retries)
+
+    def grid_and_viewer():
+        attach_photos(sender, [photo_file(f"six{n}.png", shade=n * 30) for n in range(6)])
+        expect(sender.get_by_role("button", name="Send", exact=True)).to_be_enabled(timeout=30_000)
+        send_message(sender, label, f"{PREFIX} six photos")
+        row = message_list(receiver).get_by_role("listitem").filter(has_text="six photos")
+        grid = row.locator(".photo-grid-4")
+        expect(grid.get_by_role("button")).to_have_count(4)
+        expect(grid.locator(".photo-more")).to_have_text("+2")
+        grid.get_by_role("button", name="Open photo 1 of 6").click()
+        viewer = receiver.get_by_role("dialog", name=re.compile("Photo 1 of 6 from"))
+        expect(viewer).to_be_visible()
+        expect(viewer.get_by_role("button", name="Close")).to_be_focused()
+        receiver.keyboard.press("ArrowRight")
+        expect(receiver.get_by_role("dialog", name=re.compile("Photo 2 of 6"))).to_be_visible()
+        receiver.get_by_role("button", name="Previous photo").click()
+        expect(receiver.get_by_role("dialog", name=re.compile("Photo 1 of 6"))).to_be_visible()
+        expect(receiver.get_by_role("link", name="Download photo")).to_have_attribute("href", re.compile("http"))
+        receiver.keyboard.press("Escape")
+        expect(receiver.get_by_role("dialog")).to_have_count(0)
+        expect(grid.get_by_role("button", name="Open photo 1 of 6")).to_be_focused()
+
+    step("attachments: a grid with +2, and a viewer with next, previous, download and Esc", grid_and_viewer)
+
+    def expired_links_refetch():
+        failed = []
+
+        def expire_once(route):
+            if not failed:
+                failed.append(1)
+                return route.fulfill(status=403, body="expired")
+            return route.continue_()
+
+        # A fresh browser, so nothing comes from the cache and the first photo really fails.
+        page = new_page(browser)
+        page.route(re.compile(r".*chat-attachments.*\.webp.*"), expire_once)
+        log_in(page, "INTERN")
+        refetches = []
+        page.on(
+            "request",
+            lambda r: r.method == "GET" and re.search(r"/conversations/[^/]+/messages", r.url) and refetches.append(r.url),
+        )
+        page.goto(url)
+        expect(message_list(page).locator(".photo-grid-4 img").first).to_be_visible()
+        expect.poll(lambda: len(refetches), timeout=15_000).to_be_greater_than(1) if hasattr(expect, "poll") else None
+        page.wait_for_timeout(2000)
+        assert failed, "no photo request went through the expired route"
+        assert len(refetches) > 1, f"a failed photo should fetch the messages again, saw {len(refetches)} fetch"
+        page.context.close()
+
+    step("attachments: a photo that fails to load fetches fresh links instead of breaking", expired_links_refetch)
+
+    sender.context.close()
+    receiver.context.close()
+
+    loud = mic_browser(browser)
+    recorder = loud.new_context(viewport=LAPTOP, permissions=["microphone"]).new_page()
+    listener = new_page(browser)
+    log_in(recorder, "TEAM_LEAD")
+    log_in(listener, "INTERN")
+    recorder.goto(url)
+    listener.goto(url)
+    state = {}
+
+    def record_listen_send():
+        expect(recorder.get_by_role("button", name="Record a voice note")).to_be_visible()
+        recorder.get_by_role("button", name="Record a voice note").click()
+        recorder.get_by_role("button", name="Cancel").click()
+        expect(recorder.get_by_role("button", name="Record a voice note")).to_be_visible()
+
+        record_for(recorder, 2.5)
+        review = recorder.get_by_role("group", name="Voice note ready to send")
+        expect(review.locator("audio")).to_have_attribute("src", re.compile("^blob:"))
+        uploads = []
+
+        def slow_upload(route):
+            # Held briefly, so the Processing state is there to see however fast the server is.
+            uploads.append(route.request.post_data_buffer)
+            recorder.wait_for_timeout(1200)
+            route.continue_()
+
+        recorder.route("**/attachments", slow_upload)
+        review.get_by_role("button", name="Send").click()
+        expect(recorder.get_by_role("status").filter(has_text="Processing voice note")).to_be_visible()
+        assert b'name="kind"\r\n\r\nVOICE' in uploads[0], "the upload should say it's a voice note"
+        player = message_list(listener).locator("[data-voice-player]").last
+        expect(player).to_be_visible(timeout=30_000)
+        expect(player).to_have_attribute("aria-label", re.compile(r"Voice note, 0:0[1-9]"))
+        expect(player.locator(".voice-wave i")).to_have_count(48)
+        recorder.unroute("**/attachments")
+
+    step("voice: record, cancel, listen back, then Processing until it arrives live", record_listen_send)
+
+    def playback():
+        player = message_list(listener).locator("[data-voice-player]").last
+        player.get_by_role("button", name="Play voice note").click()
+        expect(player.get_by_role("button", name="Pause voice note")).to_be_visible()
+        player.get_by_role("button", name="Pause voice note").click()
+        expect(player.get_by_role("button", name="Play voice note")).to_be_visible()
+        # Speeds change while paused: a few-second note at 2x would end mid-test.
+        speed = player.get_by_role("button", name=re.compile("^Playback speed"))
+        speed.click()
+        expect(speed).to_have_text("1.5x")
+        speed.click()
+        expect(speed).to_have_text("2x")
+        speed.click()
+        expect(speed).to_have_text("1x")
+        player.focus()
+        listener.keyboard.press("Space")
+        expect(player.get_by_role("button", name="Pause voice note")).to_be_visible()
+        listener.keyboard.press("Space")
+        expect(player.get_by_role("button", name="Play voice note")).to_be_visible()
+        wave = player.get_by_role("slider", name="Position in voice note")
+        box = wave.bounding_box()
+        listener.mouse.click(box["x"] + box["width"] * 0.6, box["y"] + box["height"] / 2)
+        expect(wave).not_to_have_attribute("aria-valuenow", "0")
+
+    step("voice: play and pause, 1.5x and 2x, Space on the player, and seeking", playback)
+
+    def one_at_a_time_and_next():
+        record_for(recorder, 1.5)
+        recorder.get_by_role("group", name="Voice note ready to send").get_by_role("button", name="Send").click()
+        players = message_list(listener).locator("[data-voice-player]")
+        expect(players).to_have_count(2, timeout=30_000)
+        first, second = players.nth(0), players.nth(1)
+        second.get_by_role("button", name="Play voice note").click()
+        expect(second.get_by_role("button", name="Pause voice note")).to_be_visible()
+        first.get_by_role("button", name="Play voice note").click()
+        expect(second.get_by_role("button", name="Play voice note")).to_be_visible()
+        first.locator("audio").evaluate("audio => { audio.currentTime = Math.max(0, audio.duration - 0.2); }")
+        expect(second.get_by_role("button", name="Pause voice note")).to_be_visible(timeout=10_000)
+
+    step("voice: only one plays at a time, and the next in a row starts on its own", one_at_a_time_and_next)
+
+    def quotes_and_preview():
+        row = message_list(recorder).get_by_role("listitem").filter(has=recorder.locator("[data-voice-player]")).last
+        row.hover()
+        row.get_by_role("button", name="Reply", exact=True).click()
+        expect(recorder.get_by_role("status").filter(has_text="Replying to")).to_contain_text("Voice note")
+        send_message(recorder, label, f"{PREFIX} about that voice note")
+        quote = message_list(listener).get_by_role("listitem").filter(has_text="about that voice note").locator(".reply-quote")
+        expect(quote).to_contain_text("Voice note")
+        conversation = call("GET", "/conversations", intern_token)["conversations"]
+        assert any(c["id"] == channel["id"] for c in conversation)
+
+    step("voice: a reply to a voice note quotes it as Voice note", quotes_and_preview)
+
+    def five_minute_limit():
+        page = loud.new_context(viewport=LAPTOP, permissions=["microphone"]).new_page()
+        page.clock.install()
+        log_in(page, "TEAM_LEAD")
+        page.goto(url)
+        expect(message_list(page)).to_be_visible()
+        page.get_by_role("button", name="Record a voice note").click()
+        # Only once it's really recording: before that, there's no clock to jump.
+        expect(page.get_by_role("timer")).to_be_visible(timeout=15_000)
+        page.clock.fast_forward("04:31")
+        expect(page.get_by_role("status").filter(has_text="left")).to_be_visible()
+        page.clock.fast_forward("00:31")
+        expect(page.get_by_role("group", name="Voice note ready to send")).to_be_visible()
+        page.get_by_role("button", name="Delete recording").click()
+        page.context.close()
+
+    step("voice: a warning at 4:30, and recording stops by itself at 5:00", five_minute_limit)
+
+    def refused_microphone():
+        page = new_page(browser)
+        page.context.grant_permissions([])
+        log_in(page, "INTERN")
+        page.goto(url)
+        page.get_by_role("button", name="Record a voice note").click()
+        expect(page.get_by_role("alert")).to_contain_text(re.compile("Microphone access is blocked|No microphone"))
+        page.context.close()
+
+    step("voice: a refused or missing microphone explains what to do", refused_microphone)
+
+    def phone_hold_to_talk():
+        phone = loud.new_context(viewport=MOBILE, has_touch=True, is_mobile=True, permissions=["microphone"]).new_page()
+        log_in(phone, "TEAM_LEAD")
+        phone.goto(url)
+        mic = phone.get_by_role("button", name="Record a voice note")
+        before = message_list(listener).locator("[data-voice-player]").count()
+
+        touch_hold(phone, mic, ms=1800)
+        expect(message_list(listener).locator("[data-voice-player]")).to_have_count(before + 1, timeout=30_000)
+
+        touch_swipe(phone, mic, -130, steps=10)
+        phone.wait_for_timeout(1500)
+        expect(mic).to_be_visible()
+        expect(message_list(listener).locator("[data-voice-player]")).to_have_count(before + 1)
+
+        box = mic.bounding_box()
+        point = {"x": box["x"] + box["width"] / 2, "y": box["y"] + box["height"] / 2}
+        session = phone.context.new_cdp_session(phone)
+        session.send("Input.dispatchTouchEvent", {"type": "touchStart", "touchPoints": [point]})
+        phone.wait_for_timeout(600)
+        for n in range(1, 9):
+            session.send("Input.dispatchTouchEvent", {"type": "touchMove", "touchPoints": [{"x": point["x"], "y": point["y"] - n * 12}]})
+        session.send("Input.dispatchTouchEvent", {"type": "touchEnd", "touchPoints": []})
+        session.detach()
+        stop = phone.get_by_role("button", name="Stop recording")
+        expect(stop).to_be_visible()
+        phone.wait_for_timeout(800)
+        stop.click()
+        expect(phone.get_by_role("group", name="Voice note ready to send")).to_be_visible()
+        expect_no_sideways_scroll(phone, "voice review on a phone")
+        phone.get_by_role("button", name="Delete recording").click()
+        phone.context.close()
+
+    step("voice: on a phone, hold to send, slide left to cancel, slide up to lock", phone_hold_to_talk)
+
+    def safari():
+        try:
+            engine = sync_playwright_instance.webkit.launch()
+        except Exception as error:  # Not installed: say so rather than pass quietly.
+            raise AssertionError(f"WebKit isn't available to test Safari: {error}")
+        try:
+            page = engine.new_context(viewport=LAPTOP).new_page()
+            # WebKit starts slowly and takes a few seconds to open the microphone, more on a busy machine.
+            page.set_default_timeout(45_000)
+            log_in(page, "TEAM_LEAD")
+            page.goto(url)
+            expect(message_list(page)).to_be_visible(timeout=45_000)
+            page.get_by_role("button", name="Record a voice note").click()
+            expect(page.get_by_role("timer")).to_be_visible(timeout=45_000)
+            page.wait_for_timeout(2000)
+            page.get_by_role("button", name="Stop recording").click()
+            expect(page.get_by_role("group", name="Voice note ready to send")).to_be_visible(timeout=20_000)
+            mime = page.evaluate("MediaRecorder.isTypeSupported('audio/mp4')")
+            page.get_by_role("group", name="Voice note ready to send").get_by_role("button", name="Send").click()
+            expect(message_list(listener).locator("[data-voice-player]").last).to_have_attribute(
+                "aria-label", re.compile(r"Voice note, 0:0[1-9]"), timeout=60_000
+            )
+            assert mime, "WebKit should record MP4/AAC"
+        finally:
+            engine.close()
+
+    step("voice: Safari (WebKit) records MP4 that converts and plays everywhere", safari)
+
+    listener.context.close()
+    loud.close()
 
 
 def run_departments(browser, admin_token):

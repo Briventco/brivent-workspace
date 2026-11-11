@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { errorMessage } from '../api/client';
+import { ApiError, errorMessage } from '../api/client';
 import {
   browseChannels,
   deleteMessage,
@@ -8,10 +8,11 @@ import {
   leaveChannel,
   markRead,
   sendMessage,
+  uploadAttachment,
   setMuted,
   updateChannel,
 } from '../api/messages';
-import { Conversation, Message, ReplyQuote } from '../api/types';
+import { Attachment, Conversation, Message, ReplyQuote } from '../api/types';
 import { ErrorState, NoAccess } from '../components/ui/AsyncState';
 import { ConfirmDialog } from '../components/ui/ConfirmDialog';
 import { EmptyState } from '../components/ui/EmptyState';
@@ -34,6 +35,7 @@ import { navigate } from '../lib/router';
 import { useApiQuery } from '../lib/useApiQuery';
 import { useConversations } from '../lib/useConversations';
 import { useThread } from '../lib/useThread';
+import { Recording } from '../lib/useVoiceRecorder';
 
 type Dialog = 'dm' | 'channel' | 'browse' | 'edit' | 'addPeople' | 'details' | null;
 type Confirming = { kind: 'delete'; message: Message } | { kind: 'leave' } | { kind: 'archive' };
@@ -107,27 +109,44 @@ export const MessagesView: React.FC<{ conversationId?: string }> = ({ conversati
     return () => window.removeEventListener('focus', refetch);
   }, [refetch]);
 
+  const patchPending = useCallback(
+    (clientId: string, changes: Partial<PendingMessage>) =>
+      setPending((list) =>
+        list.map((other) => (other.clientId === clientId ? { ...other, ...changes } : other)),
+      ),
+    [setPending],
+  );
+
   const deliver = useCallback(
     async (item: PendingMessage) => {
-      setPending((list) =>
-        list.map((other) =>
-          other.clientId === item.clientId ? { ...other, error: null } : other,
-        ),
-      );
+      patchPending(item.clientId, { error: null });
+      let voice = item.voice;
       try {
+        if (voice && !voice.uploaded) {
+          const { recording } = voice;
+          const uploaded = await uploadAttachment(
+            item.conversationId,
+            'VOICE',
+            recording.blob,
+            recording.fileName,
+          );
+          voice = { recording, uploaded };
+          patchPending(item.clientId, { voice });
+        }
+        const ids = voice?.uploaded ? [voice.uploaded.id] : item.attachments.map(({ id }) => id);
         thread.apply(
-          await sendMessage(item.conversationId, item.body, item.clientId, item.replyTo?.id),
+          await sendMessage(item.conversationId, item.body, item.clientId, item.replyTo?.id, ids),
         );
         setPending((list) => list.filter(({ clientId }) => clientId !== item.clientId));
       } catch (error) {
-        setPending((list) =>
-          list.map((other) =>
-            other.clientId === item.clientId ? { ...other, error: errorMessage(error) } : other,
-          ),
-        );
+        // Unsent uploads are deleted after an hour. A voice note can simply go up again.
+        if (voice && error instanceof ApiError && error.code === 'ATTACHMENT_NOT_FOUND') {
+          voice = { ...voice, uploaded: null };
+        }
+        patchPending(item.clientId, { error: errorMessage(error), voice });
       }
     },
-    [thread.apply, setPending],
+    [thread.apply, setPending, patchPending],
   );
 
   const [replyTargets, setReplyTargets] = useState<Record<string, ReplyQuote | null>>({});
@@ -136,19 +155,24 @@ export const MessagesView: React.FC<{ conversationId?: string }> = ({ conversati
     if (conversationId) setReplyTargets((all) => ({ ...all, [conversationId]: quote }));
   };
 
-  const send = (body: string) => {
+  const queue = (changes: Pick<PendingMessage, 'body' | 'attachments' | 'voice'>) => {
     if (!conversationId) return;
     const item: PendingMessage = {
       clientId: crypto.randomUUID(),
       conversationId,
-      body,
       replyTo: replyTarget,
       error: null,
+      ...changes,
     };
     setReplyTarget(null);
     setPending((list) => [...list, item]);
     deliver(item);
   };
+
+  const send = (body: string, attachments: Attachment[]) => queue({ body, attachments, voice: null });
+
+  const sendVoice = (recording: Recording) =>
+    queue({ body: '', attachments: [], voice: { recording, uploaded: null } });
 
   const discard = ({ clientId }: PendingMessage) =>
     setPending((list) => list.filter((item) => item.clientId !== clientId));
@@ -277,6 +301,7 @@ export const MessagesView: React.FC<{ conversationId?: string }> = ({ conversati
     if (open) {
       return (
         <ThreadPane
+          key={open.id}
           conversation={open}
           isMember={Boolean(mine)}
           isReconnecting={isReconnecting}
@@ -285,6 +310,7 @@ export const MessagesView: React.FC<{ conversationId?: string }> = ({ conversati
           draft={drafts.current.get(conversationId) ?? EMPTY_DRAFT}
           onDraftChange={(draft) => drafts.current.set(conversationId, draft)}
           onSend={send}
+          onSendVoice={sendVoice}
           onRead={read}
           onEdit={edit}
           onDelete={(message) => setConfirming({ kind: 'delete', message })}
@@ -362,7 +388,7 @@ export const MessagesView: React.FC<{ conversationId?: string }> = ({ conversati
 
       <section
         aria-label="Conversation"
-        className={`messages-thread grow ${hasThread ? 'is-open' : 'max-md:hidden'}`}
+        className={`messages-thread relative grow ${hasThread ? 'is-open' : 'max-md:hidden'}`}
       >
         {renderThread()}
       </section>

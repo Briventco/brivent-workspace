@@ -161,7 +161,7 @@ export function quoteOf(message: Message): ReplyQuote {
     id: message.id,
     author: { id: message.author.id, name: message.author.name },
     bodyPreview: message.body === null ? null : quotePreview(message.body),
-    attachmentKind: null,
+    attachmentKind: message.attachments[0]?.kind ?? null,
     deletedAt: message.deletedAt,
   };
 }
