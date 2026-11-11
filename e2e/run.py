@@ -241,6 +241,7 @@ def main():
                     if "unreadMessages" in call("GET", "/tasks/summary", admin_token)["summary"]:
                         run_messages(browser, admin_token)
                         run_replies(browser, admin_token)
+                        run_links(browser, admin_token)
                     if "learning.view" in call("GET", "/me", admin_token)["user"]["permissions"]:
                         run_learning(browser, admin_token)
             run_team_lead(browser, lead_task, lead_name, intern_name)
@@ -3077,6 +3078,66 @@ def run_avatars(browser, admin_token):
 
     page.context.close()
     call("POST", f"/users/{person['id']}/deactivate", admin_token)
+
+
+def run_links(browser, admin_token):
+    lead_auth = call("POST", "/auth/login", body=dict(zip(("email", "password"), credentials("TEAM_LEAD"))))
+    token = lead_auth["token"]
+    channel = call("POST", "/channels", token, {"name": f"e2e-links-{RUN}", "visibility": "PUBLIC"})["conversation"]
+    long_url = "https://example.com/a/very/long/path/that/keeps/going/on/and/on/forever?query=1"
+    task = call("POST", "/tasks", token, {"title": f"{PREFIX} linked from chat", "priority": "LOW", "assigneeIds": [lead_auth["user"]["id"]]})["task"]
+    post_message(token, channel["id"], f"see {long_url}, or brivent.co.")
+    post_message(token, channel["id"], "mail ada@brivent.co about it, e.g. tomorrow, and open report.pdf")
+    post_message(token, channel["id"], f"the task {APP}/tasks/{task['id']} please")
+    page = new_page(browser)
+    log_in(page, "TEAM_LEAD")
+
+    def clickable():
+        page.goto(f"{APP}/messages/{channel['id']}")
+        links = message_list(page).locator("a.msg-link")
+        expect(links).to_have_count(2)
+        long_link = links.nth(0)
+        expect(long_link).to_have_attribute("href", long_url)
+        expect(long_link).to_have_attribute("target", "_blank")
+        expect(long_link).to_have_attribute("rel", "noopener noreferrer")
+        expect(long_link).to_have_attribute("title", long_url)
+        expect(long_link).to_contain_text("…")
+        expect(long_link.locator(".ms")).to_have_count(1)
+        bare = links.nth(1)
+        expect(bare).to_have_attribute("href", "https://brivent.co")
+        expect(bare).to_have_text("brivent.co")
+        row = message_list(page).get_by_role("listitem").filter(has_text="mail ada@brivent.co")
+        expect(row.locator("a")).to_have_count(0)
+        card = message_list(page).get_by_role("listitem").filter(has_text="the task").get_by_role("link", name=re.compile("linked from chat")).last
+        expect(card).to_have_attribute("href", f"/tasks/{task['id']}")
+
+    step("links: http and bare domains are links that open safely, and task links stay cards", clickable)
+
+    def opens_in_new_tab():
+        # Stands in for the real site, so the test doesn't depend on the internet.
+        page.context.route("https://brivent.co/**", lambda route: route.fulfill(body="<title>Brivent</title>", content_type="text/html"))
+        with page.context.expect_page() as opened:
+            message_list(page).locator("a.msg-link").nth(1).click()
+        tab = opened.value
+        tab.wait_for_load_state()
+        assert tab.url.rstrip("/") == "https://brivent.co", tab.url
+        assert tab.evaluate("window.opener") is None, "the new tab can reach back into the app"
+        tab.close()
+        page.context.unroute("https://brivent.co/**")
+        expect(page).to_have_url(re.compile(f"/messages/{channel['id']}"))
+
+    step("links: a link opens in a new tab and leaves Messages where it was", opens_in_new_tab)
+
+    def phone():
+        small = new_page(browser, MOBILE)
+        log_in(small, "TEAM_LEAD")
+        small.goto(f"{APP}/messages/{channel['id']}")
+        expect(message_list(small).locator("a.msg-link").first).to_be_visible()
+        expect_no_sideways_scroll(small, "long links on a phone")
+        small.context.close()
+
+    step("links: long links never push a phone sideways", phone)
+    page.context.close()
 
 
 def run_departments(browser, admin_token):
