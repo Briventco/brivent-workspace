@@ -11,7 +11,7 @@ import {
   setMuted,
   updateChannel,
 } from '../api/messages';
-import { Conversation, Message } from '../api/types';
+import { Conversation, Message, ReplyQuote } from '../api/types';
 import { ErrorState, NoAccess } from '../components/ui/AsyncState';
 import { ConfirmDialog } from '../components/ui/ConfirmDialog';
 import { EmptyState } from '../components/ui/EmptyState';
@@ -28,7 +28,7 @@ import { ThreadPane } from '../components/messages/ThreadPane';
 import { useSession } from '../context/AuthContext';
 import { PendingMessage, RealtimeEvent, useRealtime } from '../context/RealtimeContext';
 import { useToast } from '../context/ToastContext';
-import { conversationTitle, EMPTY_DRAFT } from '../lib/messages';
+import { conversationTitle, EMPTY_DRAFT, quoteOf } from '../lib/messages';
 import { useDetailTitle } from '../lib/pageTitle';
 import { navigate } from '../lib/router';
 import { useApiQuery } from '../lib/useApiQuery';
@@ -115,7 +115,9 @@ export const MessagesView: React.FC<{ conversationId?: string }> = ({ conversati
         ),
       );
       try {
-        thread.apply(await sendMessage(item.conversationId, item.body, item.clientId));
+        thread.apply(
+          await sendMessage(item.conversationId, item.body, item.clientId, item.replyTo?.id),
+        );
         setPending((list) => list.filter(({ clientId }) => clientId !== item.clientId));
       } catch (error) {
         setPending((list) =>
@@ -128,9 +130,22 @@ export const MessagesView: React.FC<{ conversationId?: string }> = ({ conversati
     [thread.apply, setPending],
   );
 
+  const [replyTargets, setReplyTargets] = useState<Record<string, ReplyQuote | null>>({});
+  const replyTarget = conversationId ? (replyTargets[conversationId] ?? null) : null;
+  const setReplyTarget = (quote: ReplyQuote | null) => {
+    if (conversationId) setReplyTargets((all) => ({ ...all, [conversationId]: quote }));
+  };
+
   const send = (body: string) => {
     if (!conversationId) return;
-    const item = { clientId: crypto.randomUUID(), conversationId, body, error: null };
+    const item: PendingMessage = {
+      clientId: crypto.randomUUID(),
+      conversationId,
+      body,
+      replyTo: replyTarget,
+      error: null,
+    };
+    setReplyTarget(null);
     setPending((list) => [...list, item]);
     deliver(item);
   };
@@ -275,6 +290,9 @@ export const MessagesView: React.FC<{ conversationId?: string }> = ({ conversati
           onDelete={(message) => setConfirming({ kind: 'delete', message })}
           onResend={deliver}
           onDiscard={discard}
+          replyTarget={replyTarget}
+          onReply={(message) => setReplyTarget(quoteOf(message))}
+          onCancelReply={() => setReplyTarget(null)}
           onJoin={join}
           onOpenDetails={() => setDialog('details')}
         />

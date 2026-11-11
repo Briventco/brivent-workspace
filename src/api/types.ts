@@ -225,11 +225,25 @@ export interface Conversation {
   canManage: boolean;
 }
 
+export type AttachmentKind = 'IMAGE' | 'VOICE';
+
+/** What a reply quotes. Built when read, so edits and deletes of the original show through. */
+export interface ReplyQuote {
+  id: string;
+  author: Named;
+  /** Plain text, up to 140 characters, with mentions as @Name. Null once deleted. */
+  bodyPreview: string | null;
+  /** Set when the original has no text, only a photo or voice note. */
+  attachmentKind: AttachmentKind | null;
+  deletedAt: string | null;
+}
+
 export interface Message {
   id: string;
   conversationId: string;
   clientId: string;
   author: ConversationPerson;
+  replyTo: ReplyQuote | null;
   /** Null once deleted. */
   body: string | null;
   mentions: Named[];

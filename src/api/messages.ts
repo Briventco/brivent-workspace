@@ -89,10 +89,11 @@ export function sendMessage(
   conversationId: string,
   body: string,
   clientId: string,
+  replyToId?: string,
 ): Promise<Message> {
   return request<{ message: Message }>(`/conversations/${conversationId}/messages`, {
     method: 'POST',
-    body: { body, clientId },
+    body: { body, clientId, ...(replyToId && { replyToId }) },
   }).then(toMessage);
 }
 

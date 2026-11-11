@@ -1,4 +1,4 @@
-import { Conversation, LinkedTask, Message, Named, User } from '../api/types';
+import { Conversation, LinkedTask, Message, Named, ReplyQuote, User } from '../api/types';
 import { watDate } from './wat';
 
 /** A follow-up from the same person after this long gets its own name and time again. */
@@ -101,6 +101,35 @@ export const canLeave = (conversation: Conversation, user: Pick<User, 'departmen
 
 export const canArchive = (conversation: Conversation) =>
   conversation.canManage && !isDefaultChannel(conversation) && !conversation.department;
+
+const QUOTE_LENGTH = 140;
+
+/** A quote's text the way the server builds it: plain, with mentions as @Name. */
+export const quotePreview = (body: string) =>
+  body.replace(MENTION_MARKUP, '@$1').slice(0, QUOTE_LENGTH);
+
+export function quoteOf(message: Message): ReplyQuote {
+  return {
+    id: message.id,
+    author: { id: message.author.id, name: message.author.name },
+    bodyPreview: message.body === null ? null : quotePreview(message.body),
+    attachmentKind: null,
+    deletedAt: message.deletedAt,
+  };
+}
+
+/**
+ * No event is sent for each quote of an edited or deleted message, so every reply that quotes it
+ * is brought up to date here.
+ */
+export function refreshQuotes(messages: Message[], changed: Message): Message[] {
+  if (!messages.some(({ replyTo }) => replyTo?.id === changed.id)) return messages;
+  return messages.map((message) =>
+    message.replyTo?.id === changed.id
+      ? { ...message, replyTo: { ...quoteOf(changed), attachmentKind: message.replyTo.attachmentKind } }
+      : message,
+  );
+}
 
 /** Keeps each message once, oldest first, with the incoming copy winning. */
 export function mergeMessages(current: Message[], incoming: Message[]): Message[] {

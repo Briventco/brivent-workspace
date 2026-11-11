@@ -11,7 +11,7 @@ import { io } from 'socket.io-client';
 import { getMe } from '../api/auth';
 import { API_ORIGIN, getToken } from '../api/client';
 import { getTaskSummary } from '../api/tasks';
-import { Conversation, Message } from '../api/types';
+import { Conversation, Message, ReplyQuote } from '../api/types';
 import { Draft } from '../lib/messages';
 
 const POLL_MS = 15_000;
@@ -36,6 +36,8 @@ export interface PendingMessage {
   clientId: string;
   conversationId: string;
   body: string;
+  /** What it replies to, sent as replyToId and shown while it's on its way. */
+  replyTo: ReplyQuote | null;
   /** Set when sending failed: what went wrong, in words for the person. */
   error: string | null;
 }
