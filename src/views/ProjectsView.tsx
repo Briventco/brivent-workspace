@@ -43,7 +43,7 @@ const ProjectCard: React.FC<{ project: Project }> = ({ project }) => {
       <div className="mt-4 flex items-center gap-3 text-small text-text-2">
         <span className="av-stack grow" aria-label={`${members.length} members`}>
           {members.slice(0, MAX_AVATARS).map((member) => (
-            <Avatar key={member.id} name={member.name} id={member.id} size="sm" />
+            <Avatar key={member.id} name={member.name} id={member.id} avatar={member.avatar} size="sm" />
           ))}
           {members.length > MAX_AVATARS && (
             <span className="ml-2">+{members.length - MAX_AVATARS}</span>

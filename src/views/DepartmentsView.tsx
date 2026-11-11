@@ -34,7 +34,7 @@ const DepartmentCard: React.FC<{ department: Department; onEdit: () => void }> =
       <p className="flex items-center gap-2 min-w-0">
         {lead ? (
           <>
-            <Avatar name={lead.name} id={lead.id} size="sm" />
+            <Avatar name={lead.name} id={lead.id} avatar={lead.avatar} size="sm" />
             <span className="truncate">{lead.name}</span>
             <span className="text-small text-text-2 shrink-0">Lead</span>
           </>

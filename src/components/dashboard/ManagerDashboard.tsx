@@ -20,6 +20,7 @@ import { MeetingsCard, useTodaysMeetings } from './MeetingsCard';
 import { BlockersCard, NotCheckedInCard } from './TeamCheckinCards';
 import { daysLate, TaskRow } from './TaskRow';
 import { LearningCard } from './LearningCard';
+import { PicturePrompt } from './PicturePrompt';
 import { UnreadMessagesLink } from './UnreadMessagesLink';
 
 const TASKS = '/tasks?view=all';
@@ -360,6 +361,7 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ summary, onC
 
       <MissingDepartmentsPrompt query={missingDepartments} />
 
+      <PicturePrompt />
       <UnreadMessagesLink summary={summary} />
       <LearningCard summary={summary} />
 

@@ -26,6 +26,7 @@ export interface User extends Placement {
   status: UserStatus;
   mustChangePassword: boolean;
   createdAt: string;
+  avatar: AvatarUrls | null;
 }
 
 export interface Session {
@@ -62,9 +63,17 @@ export const PRIORITY_LABELS: Record<TaskPriority, string> = {
   URGENT: 'Urgent',
 };
 
+/** Square WebP pictures: `small` is 128px for lists, `large` 512px for profiles. */
+export interface AvatarUrls {
+  small: string;
+  large: string;
+}
+
 export interface Named {
   id: string;
   name: string;
+  /** Most people the API returns carry this. Null means no picture, so show initials. */
+  avatar?: AvatarUrls | null;
 }
 
 export interface PersonRef extends Named, Placement {}

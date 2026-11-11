@@ -132,7 +132,7 @@ export const DirectoryView: React.FC = () => {
                 <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
                   {group.people.map((person) => (
                     <li key={person.id} className="card card-pad flex items-center gap-3">
-                      <Avatar name={person.name} id={person.id} size="lg" />
+                      <Avatar name={person.name} id={person.id} avatar={person.avatar} size="lg" />
                       <div className="min-w-0 grow">
                         <p className="font-semibold truncate">{person.name}</p>
                         <p className="text-small text-text-2 truncate">{personTitle(person)}</p>

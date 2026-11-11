@@ -61,7 +61,7 @@ export const BlockersCard: React.FC<{ query: ApiQuery<TeamCheckins>; onChanged: 
           <ul className="divide-y divide-border">
             {open.map((checkin) => (
               <li key={checkin.id} className="flex flex-col sm:flex-row gap-3 p-4 sm:px-5">
-                <Avatar name={checkin.user.name} id={checkin.user.id} />
+                <Avatar name={checkin.user.name} id={checkin.user.id} avatar={checkin.user.avatar} />
                 <div className="min-w-0 grow">
                   <p>
                     <span className="font-semibold">{checkin.user.name}</span>{' '}
@@ -112,7 +112,7 @@ export const NotCheckedInCard: React.FC<{ query: ApiQuery<TeamCheckins> }> = ({ 
         <ul className="divide-y divide-border">
           {notCheckedIn.map((person) => (
             <li key={person.id} className="li">
-              <Avatar name={person.name} id={person.id} />
+              <Avatar name={person.name} id={person.id} avatar={person.avatar} />
               <span className="min-w-0 grow">
                 <span className="title block truncate">{person.name}</span>
                 {personTitle(person) && (

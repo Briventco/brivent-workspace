@@ -114,7 +114,7 @@ const BlockerCard: React.FC<{ checkin: Checkin; onChanged: () => void }> = ({
   return (
     <article className={`card flex flex-col ${handled ? '' : 'attn'}`}>
       <div className="p-4 pb-0 flex items-center gap-3">
-        <Avatar name={checkin.user.name} id={checkin.user.id} />
+        <Avatar name={checkin.user.name} id={checkin.user.id} avatar={checkin.user.avatar} />
         <div className="min-w-0 grow">
           <p className="font-semibold truncate">{checkin.user.name}</p>
           <p className="text-small text-text-2">
@@ -199,7 +199,7 @@ const SubmittedRow: React.FC<{ checkin: Checkin; onChanged: () => void }> = ({
 
   return (
     <li className="flex gap-3 p-4 sm:px-5">
-      <Avatar name={checkin.user.name} id={checkin.user.id} size="sm" />
+      <Avatar name={checkin.user.name} id={checkin.user.id} avatar={checkin.user.avatar} size="sm" />
       <div className="min-w-0 grow space-y-1.5">
         <p className="flex flex-wrap items-center gap-2">
           <span className="font-semibold">
@@ -243,7 +243,7 @@ const MissingCard: React.FC<{ people: CheckinPerson[] }> = ({ people }) => (
       <ul className="divide-y divide-border">
         {people.map((person) => (
           <li key={person.id} className="li">
-            <Avatar name={person.name} id={person.id} size="sm" />
+            <Avatar name={person.name} id={person.id} avatar={person.avatar} size="sm" />
             <span className="min-w-0 grow title truncate">{person.name}</span>
             <span className="text-small text-text-2 truncate">{personTitle(person)}</span>
           </li>

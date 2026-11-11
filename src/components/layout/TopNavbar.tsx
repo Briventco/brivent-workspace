@@ -49,7 +49,7 @@ const UserMenu: React.FC = () => {
         aria-label={`Account menu for ${user.fullName}`}
         className="me"
       >
-        <Avatar name={user.fullName} id={user.id} />
+        <Avatar name={user.fullName} id={user.id} avatar={user.avatar} />
         <span
           className="hidden sm:block text-left min-w-0 max-w-[12rem]"
           title={`${user.fullName}${personTitle(user) ? ` · ${personTitle(user)}` : ''}`}

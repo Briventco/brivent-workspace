@@ -223,7 +223,7 @@ export const MeetingFormPanel: React.FC<MeetingFormPanelProps> = ({
             <ul className="mt-2 flex flex-wrap gap-2">
               {attendees.map((person) => (
                 <li key={person.id} className="chip">
-                  <Avatar name={person.name} id={person.id} size="sm" />
+                  <Avatar name={person.name} id={person.id} avatar={person.avatar} size="sm" />
                   {person.name}
                   <IconButton
                     icon="close"

@@ -30,7 +30,7 @@ export const Replies: React.FC<{ replies: CheckinReply[]; youId?: string }> = ({
   <>
     {replies.map((reply) => (
       <div key={reply.id} className="reply-box">
-        <Avatar name={reply.author.name} id={reply.author.id} size="sm" />
+        <Avatar name={reply.author.name} id={reply.author.id} avatar={reply.author.avatar} size="sm" />
         <p className="min-w-0 whitespace-pre-wrap break-words">
           <span className="font-semibold">
             {reply.author.id === youId ? 'You' : reply.author.name.split(' ')[0]}:

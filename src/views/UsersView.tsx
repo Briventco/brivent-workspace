@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { format } from 'date-fns';
 import { errorMessage } from '../api/client';
+import { removeUserAvatar } from '../api/avatars';
 import { listDepartments } from '../api/departments';
 import { User } from '../api/types';
 import {
@@ -72,6 +73,8 @@ export const UsersView: React.FC = () => {
   const [isChangingStatus, setIsChangingStatus] = useState(false);
   const [resendingId, setResendingId] = useState<string | null>(null);
   const [resendResult, setResendResult] = useState<EmailedLinkResult | null>(null);
+  const [pictureTarget, setPictureTarget] = useState<User | null>(null);
+  const [isRemovingPicture, setIsRemovingPicture] = useState(false);
 
   const canCreate = can('inviteUser');
   const canUpdate = can('updateUser');
@@ -90,6 +93,9 @@ export const UsersView: React.FC = () => {
     const items: MenuItem[] = [];
     if (canUpdate && canManage(user)) {
       items.push({ label: 'Edit', icon: 'edit', onSelect: () => setEditing(user) });
+    }
+    if (can('removeAvatar') && user.avatar) {
+      items.push({ label: 'Remove picture', icon: 'person', onSelect: () => setPictureTarget(user) });
     }
     if (canResetPassword && !isSelf && user.status === 'ACTIVE') {
       items.push({ label: 'Reset password', icon: 'lock_reset', onSelect: () => setResetTarget(user) });
@@ -127,6 +133,24 @@ export const UsersView: React.FC = () => {
     } finally {
       setIsChangingStatus(false);
       setStatusTarget(null);
+    }
+  };
+
+  const handleRemovePicture = async () => {
+    if (!pictureTarget) return;
+    setIsRemovingPicture(true);
+    try {
+      await removeUserAvatar(pictureTarget.id);
+      toast.success(`${pictureTarget.fullName}'s picture has been removed.`);
+      query.reload();
+      if (pictureTarget.id === currentUser.id) {
+        refresh().catch((error: unknown) => toast.error(errorMessage(error)));
+      }
+    } catch (error) {
+      toast.error(errorMessage(error));
+    } finally {
+      setIsRemovingPicture(false);
+      setPictureTarget(null);
     }
   };
 
@@ -221,7 +245,7 @@ export const UsersView: React.FC = () => {
                     <TableRow key={user.id}>
                       <td>
                         <div className="flex items-center gap-3 w-[15rem] max-w-[60vw]">
-                          <Avatar name={user.fullName} id={user.id} />
+                          <Avatar name={user.fullName} id={user.id} avatar={user.avatar} />
                           <div className="min-w-0">
                             <p className="font-semibold truncate">
                               {user.fullName}
@@ -332,6 +356,17 @@ export const UsersView: React.FC = () => {
           onClose={() => setResendResult(null)}
         />
       )}
+
+      <ConfirmDialog
+        isOpen={pictureTarget !== null}
+        title="Remove their picture?"
+        description={`${pictureTarget?.fullName}'s initials will show instead, everywhere they appear. They can upload a new one.`}
+        confirmLabel="Remove picture"
+        confirmVariant="danger"
+        isLoading={isRemovingPicture}
+        onConfirm={handleRemovePicture}
+        onClose={() => setPictureTarget(null)}
+      />
 
       <ConfirmDialog
         isOpen={statusTarget !== null}

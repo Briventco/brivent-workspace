@@ -13,6 +13,7 @@ import { DashboardSkeleton } from './DashboardSkeleton';
 import { MeetingsCard, useTodaysMeetings } from './MeetingsCard';
 import { isDueToday, TaskRow } from './TaskRow';
 import { LearningCard } from './LearningCard';
+import { PicturePrompt } from './PicturePrompt';
 import { UnreadMessagesLink } from './UnreadMessagesLink';
 
 const MAX_ROWS = 5;
@@ -111,6 +112,7 @@ export const MemberDashboard: React.FC<{ summary: TaskSummary }> = ({ summary })
 
       <CheckInCard checkedIn={summary.checkedInToday} />
 
+      <PicturePrompt />
       <UnreadMessagesLink summary={summary} />
       <LearningCard summary={summary} />
 

@@ -31,6 +31,8 @@ interface AuthApi {
   changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
   /** Re-reads the session, for after an edit that may have changed the logged-in user. */
   refresh: () => Promise<void>;
+  /** Puts a session the server just returned in place, such as after a new profile picture. */
+  replaceSession: (session: Session) => void;
   retry: () => void;
 }
 
@@ -117,9 +119,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const retry = useCallback(() => setAttempt((n) => n + 1), []);
 
+  const replaceSession = useCallback(
+    (session: Session) => setState({ status: 'authenticated', session }),
+    [],
+  );
+
   const value = useMemo(
-    () => ({ state, signIn, signOut, forgetSession, changePassword, refresh, retry }),
-    [state, signIn, signOut, forgetSession, changePassword, refresh, retry],
+    () => ({ state, signIn, signOut, forgetSession, changePassword, refresh, retry, replaceSession }),
+    [state, signIn, signOut, forgetSession, changePassword, refresh, retry, replaceSession],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

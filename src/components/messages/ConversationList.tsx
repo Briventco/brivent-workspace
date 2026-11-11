@@ -16,7 +16,12 @@ function channelIcon({ isAnnouncement, visibility }: Conversation): IconName {
 
 export const ConversationIcon: React.FC<{ conversation: Conversation }> = ({ conversation }) =>
   conversation.kind === 'DM' ? (
-    <Avatar name={conversationName(conversation)} id={conversation.otherUser?.id} size="sm" />
+    <Avatar
+      name={conversationName(conversation)}
+      id={conversation.otherUser?.id}
+      avatar={conversation.otherUser?.avatar}
+      size="sm"
+    />
   ) : (
     <Icon name={channelIcon(conversation)} size="sm" className="text-text-2" />
   );

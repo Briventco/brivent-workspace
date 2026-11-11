@@ -52,7 +52,7 @@ const PendingItem: React.FC<{
   return (
     <li className={`flex gap-3 px-4 md:px-6 pt-2 pb-0.5 ${item.error ? '' : 'opacity-60'}`}>
       <div className="w-8 shrink-0">
-        <Avatar name={user.fullName} id={user.id} />
+        <Avatar name={user.fullName} id={user.id} avatar={user.avatar} />
       </div>
       <div className="grow min-w-0">
         <p className="flex items-baseline gap-2">

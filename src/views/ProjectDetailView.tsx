@@ -208,7 +208,7 @@ const MembersCard: React.FC<{
           const isOwner = member.id === project.owner.id;
           return (
             <li key={member.id} className="li">
-              <Avatar name={member.name} id={member.id} />
+              <Avatar name={member.name} id={member.id} avatar={member.avatar} />
               <div className="min-w-0 grow">
                 <p className="title truncate">{member.name}</p>
                 <p className="text-small text-text-2">

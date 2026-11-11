@@ -38,6 +38,7 @@ const ACTIONS = {
   assignSuperAdmin: 'users.assign_super_admin',
   resetUserPassword: 'users.reset_password',
   resendInvite: 'users.resend_invite',
+  removeAvatar: 'users.remove_avatar',
   manageDepartments: 'departments.manage',
 } as const;
 

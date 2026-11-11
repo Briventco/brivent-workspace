@@ -197,6 +197,44 @@
   min-width: 0;
 }
 
+/* A picture sits over the initials, so the circle never changes size while it loads. */
+.av {
+  position: relative;
+  overflow: hidden;
+}
+
+.crop-frame {
+  position: relative;
+  overflow: hidden;
+  border-radius: 50%;
+  background: var(--surface-2);
+  box-shadow: 0 0 0 1px var(--border);
+  cursor: grab;
+  touch-action: none;
+}
+
+.crop-frame:active {
+  cursor: grabbing;
+}
+
+.crop-frame img {
+  position: absolute;
+  top: 0;
+  left: 0;
+  max-width: none;
+  user-select: none;
+  pointer-events: none;
+}
+
+.av img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 50%;
+}
+
 /* Pressed states, so every click lands with a response. */
 .btn:active:not(:disabled),
 .chip:active,
@@ -514,6 +552,25 @@ button.reply-quote:hover {
 .message-row.is-highlighted {
   background: var(--brand-50);
   transition: none;
+}
+
+.msg-link {
+  display: inline;
+  color: var(--brand);
+  font-weight: 500;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  overflow-wrap: anywhere;
+}
+
+.msg-link .ms {
+  display: inline-block;
+  margin-right: 2px;
+  vertical-align: -3px;
+}
+
+.msg-link:hover {
+  text-decoration-thickness: 2px;
 }
 
 .mention {
