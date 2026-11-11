@@ -68,4 +68,3 @@ As well as the screenshots, a script checked every page for:
 ## Not changed
 
 - **User Management on phones:** the mobile artboard shows user cards. The table scrolls with the name pinned instead, which the brief allows. Cards would be a separate piece of work.
-- **The More page and sidebar for learners:** they shift slightly, by 0.03, because Learning appears once the enrollment check answers. It's cached after the first visit.

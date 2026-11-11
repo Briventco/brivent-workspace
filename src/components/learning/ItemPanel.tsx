@@ -1,6 +1,10 @@
 import React, { useState } from 'react';
 import { ApiError, errorMessage } from '../../api/client';
-import { completeResource, reviewSubmission, submitAssignment } from '../../api/learning';
+import { completeResource, getCohort, reviewSubmission, submitAssignment } from '../../api/learning';
+import { COURSE_STATUS_LABELS, isHttps } from '../../lib/courses';
+import { Link } from '../../lib/router';
+import { useApiQuery } from '../../lib/useApiQuery';
+import { Banner } from '../ui/Banner';
 import { EnrollmentDetail, EnrollmentItem, ReviewDecision, Submission } from '../../api/types';
 import { useToast } from '../../context/ToastContext';
 import { dueText } from '../../lib/learning';
@@ -11,14 +15,6 @@ import { Input } from '../ui/Input';
 import { SidePanel } from '../ui/SidePanel';
 import { Textarea } from '../ui/Textarea';
 import { ItemStatusBadge, ScorePicker } from './LearningParts';
-
-const isHttps = (link: string) => {
-  try {
-    return new URL(link).protocol === 'https:';
-  } catch {
-    return false;
-  }
-};
 
 const Section: React.FC<{ title: string; children: React.ReactNode }> = ({ title, children }) => (
   <section>
@@ -37,7 +33,16 @@ const SubmissionDetails: React.FC<{ submission: Submission; attempts: number }> 
   return (
     <>
       <Section title={title}>
-        <p className="text-small text-text-2 mb-1">{formatDateTime(new Date(submittedAt))}</p>
+        <p className="text-small text-text-2 mb-1">
+          {formatDateTime(new Date(submittedAt))}
+          {submission.isTeamSubmission && submission.submittedBy && ` · Sent by ${submission.submittedBy.name} for the team`}
+        </p>
+        {[submission.repoUrl, submission.liveUrl].filter(Boolean).map((url) => (
+          <a key={url} href={url!} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 break-all mb-1">
+            <Icon name={url === submission.repoUrl ? 'code' : 'open_in_new'} size="sm" />
+            {url}
+          </a>
+        ))}
         {link && (
           <a
             href={link}
@@ -60,6 +65,13 @@ const SubmissionDetails: React.FC<{ submission: Submission; attempts: number }> 
               {score !== null && <span className="font-normal text-text-2"> · Score {score} of 5</span>}
             </p>
             {feedback && <p className="mt-1 whitespace-pre-wrap break-words">{feedback}</p>}
+            {submission.memberReviews.map((member) => (
+              <p key={member.learner.id} className="mt-1 text-small">
+                <span className="font-semibold">{member.learner.name}</span>
+                {member.score !== null && ` · ${member.score} of 5`}
+                {member.note && `: ${member.note}`}
+              </p>
+            ))}
             <p className="mt-1 text-small text-text-2">
               {reviewedBy?.name}
               {reviewedAt && `, ${formatDateTime(new Date(reviewedAt))}`}
@@ -133,10 +145,98 @@ const SubmitForm: React.FC<{
   );
 };
 
-const ReviewForm: React.FC<{ submission: Submission; onDone: () => void }> = ({
-  submission,
+const BuildForm: React.FC<{ enrollmentId: string; item: EnrollmentItem; isTeam: boolean; onDone: () => void }> = ({
+  enrollmentId,
+  item,
+  isTeam,
   onDone,
 }) => {
+  const toast = useToast();
+  const [repoUrl, setRepoUrl] = useState('');
+  const [liveUrl, setLiveUrl] = useState('');
+  const [note, setNote] = useState('');
+  const [errors, setErrors] = useState<{ repo?: string; live?: string }>({});
+  const [isSaving, setIsSaving] = useState(false);
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const repo = repoUrl.trim();
+    const live = liveUrl.trim();
+    const problems = {
+      repo: !repo ? 'Add the link to the code.' : !isHttps(repo) ? 'Use a full https link.' : undefined,
+      live: live && !isHttps(live) ? 'Use a full https link.' : undefined,
+    };
+    setErrors(problems);
+    if (problems.repo || problems.live) return;
+    setIsSaving(true);
+    try {
+      await submitAssignment(enrollmentId, item.id, {
+        repoUrl: repo,
+        liveUrl: live || null,
+        ...(note.trim() && { note: note.trim() }),
+      });
+      toast.success(isTeam ? 'Sent for the whole team.' : 'Sent for review.');
+      onDone();
+    } catch (error) {
+      setIsSaving(false);
+      toast.error(errorMessage(error));
+    }
+  };
+
+  return (
+    <form onSubmit={submit} noValidate className="space-y-3">
+      {isTeam && <p className="text-small text-text-2">One submission counts for the whole team.</p>}
+      <Input label="Code link" type="url" placeholder="https://github.com/…" value={repoUrl} error={errors.repo} onChange={(e) => setRepoUrl(e.target.value)} />
+      <Input label="Live link" optional type="url" placeholder="https://" value={liveUrl} error={errors.live} onChange={(e) => setLiveUrl(e.target.value)} />
+      <Textarea label="Note" optional rows={2} value={note} onChange={(e) => setNote(e.target.value)} />
+      <Button type="submit" isLoading={isSaving}>
+        {item.status === 'CHANGES_REQUESTED' ? 'Send again' : 'Send the build'}
+      </Button>
+    </form>
+  );
+};
+
+/** A team build: an optional score and note for each person, which only they see. */
+const MemberReviews: React.FC<{
+  cohortId: string;
+  value: Record<string, { score: number | null; note: string }>;
+  onChange: (value: Record<string, { score: number | null; note: string }>) => void;
+}> = ({ cohortId, value, onChange }) => {
+  const cohort = useApiQuery((signal) => getCohort(cohortId, signal), [cohortId]);
+  if (!cohort.data) return null;
+  return (
+    <fieldset className="border-0 p-0 m-0 space-y-3">
+      <legend className="label">For each person (optional)</legend>
+      {cohort.data.learners.map(({ learner }) => {
+        const entry = value[learner.id] ?? { score: null, note: '' };
+        return (
+          <div key={learner.id} className="rounded-md border border-border p-3 space-y-2">
+            <p className="font-semibold">{learner.name}</p>
+            <ScorePicker
+              label={`Score for ${learner.name}`}
+              value={entry.score}
+              onChange={(score) => onChange({ ...value, [learner.id]: { ...entry, score } })}
+            />
+            <Input
+              label={`Note for ${learner.name}`}
+              hideLabel
+              placeholder="A note just for them"
+              value={entry.note}
+              onChange={(e) => onChange({ ...value, [learner.id]: { ...entry, note: e.target.value } })}
+            />
+          </div>
+        );
+      })}
+    </fieldset>
+  );
+};
+
+const ReviewForm: React.FC<{ submission: Submission; teamCohortId?: string; onDone: () => void }> = ({
+  submission,
+  teamCohortId,
+  onDone,
+}) => {
+  const [members, setMembers] = useState<Record<string, { score: number | null; note: string }>>({});
   const toast = useToast();
   const [feedback, setFeedback] = useState('');
   const [score, setScore] = useState<number | null>(null);
@@ -152,10 +252,18 @@ const ReviewForm: React.FC<{ submission: Submission; onDone: () => void }> = ({
     setError(undefined);
     setSaving(decision);
     try {
+      const memberReviews = Object.entries(members)
+        .filter(([, entry]) => entry.score !== null || entry.note.trim())
+        .map(([learnerId, entry]) => ({
+          learnerId,
+          ...(entry.score !== null && { score: entry.score }),
+          ...(entry.note.trim() && { note: entry.note.trim() }),
+        }));
       await reviewSubmission(submission.id, {
         decision,
         ...(text && { feedback: text }),
         score,
+        ...(memberReviews.length > 0 && { memberReviews }),
       });
       toast.success(decision === 'APPROVED' ? 'Approved.' : 'Changes requested.');
       onDone();
@@ -182,6 +290,7 @@ const ReviewForm: React.FC<{ submission: Submission; onDone: () => void }> = ({
           </p>
           <ScorePicker label="Score" value={score} onChange={setScore} />
         </div>
+        {teamCohortId && <MemberReviews cohortId={teamCohortId} value={members} onChange={setMembers} />}
         <div className="flex flex-wrap gap-2">
           <Button
             icon="check"
@@ -231,6 +340,10 @@ export const ItemPanel: React.FC<ItemPanelProps> = ({
   const isActive = enrollment.status === 'ACTIVE';
   const { type, title, instructions, resourceUrl, status, latestSubmission, attempts } = item;
   const isResource = type === 'RESOURCE';
+  const isCourse = type === 'COURSE';
+  const isBuild = type === 'BUILD';
+  const teamCohortId =
+    isBuild && enrollment.cohort?.submissionMode === 'TEAM' ? enrollment.cohort.id : undefined;
 
   const markDone = async () => {
     if (onMarkDone) {
@@ -250,7 +363,12 @@ export const ItemPanel: React.FC<ItemPanelProps> = ({
   };
 
   const canSubmit =
-    isLearner && isActive && !isResource && ['NOT_STARTED', 'CHANGES_REQUESTED'].includes(status);
+    isLearner &&
+    isActive &&
+    !isResource &&
+    !isCourse &&
+    !item.isLocked &&
+    ['NOT_STARTED', 'CHANGES_REQUESTED'].includes(status);
   const needsReview = canReview && isActive && status === 'SUBMITTED' && latestSubmission !== null;
 
   return (
@@ -268,6 +386,45 @@ export const ItemPanel: React.FC<ItemPanelProps> = ({
           <Section title={isResource ? 'About this' : 'Instructions'}>
             <p className="whitespace-pre-wrap break-words">{instructions}</p>
           </Section>
+        )}
+
+        {isCourse && item.course && (
+          <Section title="Course">
+            <p className="font-semibold">{item.course.title}</p>
+            <p className="text-small text-text-2 mb-2">
+              {item.course.provider}
+              {item.courseStatus && ` · ${COURSE_STATUS_LABELS[item.courseStatus]}`}
+            </p>
+            <Link to={`/learning/courses/${item.course.id}`} className="btn btn-secondary">
+              Go to the course
+            </Link>
+            <p className="mt-2 text-small text-text-2">
+              It's done here as soon as the course is: progress counts on every track that includes it.
+            </p>
+          </Section>
+        )}
+
+        {isBuild && (
+          <>
+            {item.brief && (
+              <Section title="What to build">
+                <p className="whitespace-pre-wrap break-words">{item.brief}</p>
+              </Section>
+            )}
+            {item.deliverables && (
+              <Section title="Deliverables">
+                <p className="whitespace-pre-wrap break-words">{item.deliverables}</p>
+              </Section>
+            )}
+            {item.project && (
+              <p>
+                In <Link to={`/projects/${item.project.id}`}>{item.project.name}</Link>
+              </p>
+            )}
+            {item.isLocked && (
+              <Banner tone="info">This build unlocks once the learning before it is done.</Banner>
+            )}
+          </>
         )}
 
         {resourceUrl && (
@@ -294,11 +451,17 @@ export const ItemPanel: React.FC<ItemPanelProps> = ({
 
         {canSubmit && (
           <Section title={status === 'CHANGES_REQUESTED' ? 'Resubmit your work' : 'Submit your work'}>
-            <SubmitForm enrollmentId={enrollment.id} item={item} onDone={onChanged} />
+            {isBuild ? (
+              <BuildForm enrollmentId={enrollment.id} item={item} isTeam={Boolean(teamCohortId)} onDone={onChanged} />
+            ) : (
+              <SubmitForm enrollmentId={enrollment.id} item={item} onDone={onChanged} />
+            )}
           </Section>
         )}
 
-        {needsReview && <ReviewForm submission={latestSubmission} onDone={onChanged} />}
+        {needsReview && (
+          <ReviewForm submission={latestSubmission} teamCohortId={teamCohortId} onDone={onChanged} />
+        )}
       </div>
     </SidePanel>
   );

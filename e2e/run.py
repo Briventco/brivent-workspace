@@ -5,7 +5,7 @@ import re
 import sys
 import time
 import urllib.error
-import urllib.error
+import urllib.parse
 import urllib.request
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -250,6 +250,8 @@ def main():
                             run_link_previews(browser, admin_token)
                     if "learning.view" in call("GET", "/me", admin_token)["user"]["permissions"]:
                         run_learning(browser, admin_token)
+                        if has_programs(admin_token):
+                            run_learning_programs(browser, admin_token)
             run_team_lead(browser, lead_task, lead_name, intern_name)
             run_permissions(lead_email, lead_password)
             run_intern(browser, lead_task, admin_task)
@@ -2205,14 +2207,15 @@ def run_learning(browser, admin_token):
     log_in(lead, "TEAM_LEAD")
     log_in(learner, "INTERN")
 
-    def hidden_without_enrollment():
-        expect(learner.get_by_role("link", name="Daily Check-in")).to_be_visible()
-        expect(learner.get_by_role("link", name="Learning", exact=True)).to_have_count(0)
+    def empty_without_enrollment():
+        # Everyone can take a course from the library, so Learning shows before any enrollment.
+        expect(learner.get_by_role("link", name="Learning", exact=True)).to_be_visible()
         learner.goto(f"{APP}/learning")
         expect(learner.get_by_role("heading", name="No learning yet")).to_be_visible()
+        expect(learner.get_by_role("link", name="Browse courses")).to_be_visible()
         expect(learner.get_by_role("button", name="New track")).to_have_count(0)
 
-    step("learning: no sidebar item without an enrollment, and a clear empty page", hidden_without_enrollment)
+    step("learning: Learning shows without an enrollment, with a clear empty page", empty_without_enrollment)
 
     def role_tabs():
         open_nav_link(lead, "Learning")
@@ -3643,6 +3646,294 @@ def run_link_previews(browser, admin_token):
 
     sender.context.close()
     receiver.context.close()
+
+
+YT_FAKE = """
+window.YT = {
+  PlayerState: { ENDED: 0, PLAYING: 1, PAUSED: 2 },
+  Player: function (element, options) {
+    const player = this;
+    player.time = 0;
+    player.getCurrentTime = () => player.time;
+    player.getDuration = () => 120;
+    player.destroy = () => {};
+    player.fire = (state, time) => { player.time = time; options.events.onStateChange({ data: state }); };
+    window.__players = (window.__players || []).concat(player);
+  },
+};
+window.onYouTubeIframeAPIReady && window.onYouTubeIframeAPIReady();
+"""
+
+
+def has_programs(token):
+    try:
+        call("GET", "/learning/cohorts", token)
+    except urllib.error.HTTPError as error:
+        return error.code != 404
+    return True
+
+
+def run_learning_programs(browser, admin_token):
+    lead_auth = call("POST", "/auth/login", body=dict(zip(("email", "password"), credentials("TEAM_LEAD"))))
+    lead_token, lead_user = lead_auth["token"], lead_auth["user"]
+    ada = active_user(admin_token, f"E2E Ada Builder {RUN}", f"e2e.ada.{RUN}@example.test")
+    ben = active_user(admin_token, f"E2E Ben Builder {RUN}", f"e2e.ben.{RUN}@example.test")
+    course_title = f"{PREFIX} Next.js foundations"
+    track_title = f"{PREFIX} Learn then build"
+    program_name = f"{PREFIX} Cohort one"
+    state = {}
+
+    lead = new_page(browser)
+    learner = new_page(browser)
+    log_in(lead, "TEAM_LEAD")
+    log_in_as(learner, ada["email"], ada["password"])
+
+    def library_before_enrollment():
+        learner.goto(f"{APP}/learning")
+        expect(learner.get_by_role("heading", name="No learning yet")).to_be_visible()
+        tabs = learner.get_by_role("tablist", name="Learning views")
+        expect(tabs.get_by_role("tab", name="Courses")).to_be_visible()
+        expect(tabs.get_by_role("tab", name="Programs")).to_have_count(0)
+        learner.get_by_role("link", name="Browse courses").click()
+        expect(learner).to_have_url(re.compile(r"tab=courses"))
+        expect(learner.get_by_role("button", name="Add a course")).to_have_count(0)
+
+    step("programs: a learner without an enrollment can browse courses, but not add them", library_before_enrollment)
+
+    def add_course():
+        lead.goto(f"{APP}/learning?tab=courses")
+        lead.get_by_role("button", name="Add a course").click()
+        dialog = lead.get_by_role("dialog", name="Add a course")
+        dialog.get_by_label("Title").fill(course_title)
+        dialog.get_by_label("Provider").fill("Vercel")
+        dialog.get_by_label("Course link").fill("http://nextjs.org/learn")
+        dialog.get_by_role("button", name="Add course").click()
+        expect(dialog.get_by_text("Use a full https link to the course.")).to_be_visible()
+        dialog.get_by_label("Course link").fill("https://nextjs.org/learn")
+        dialog.get_by_label("Proof of finishing").select_option("CERTIFICATE_LINK")
+        dialog.get_by_label(re.compile("^Topics")).fill("nextjs, react")
+        dialog.get_by_role("button", name="Add course").click()
+        expect(lead.get_by_text("Course added to the library.")).to_be_visible()
+        # Adding opens the new course.
+        expect(lead.get_by_role("heading", name=course_title)).to_be_visible()
+        expect(lead).to_have_url(re.compile(r"/learning/courses/[0-9a-f-]{36}$"))
+        state["course"] = lead.url.rsplit("/", 1)[1]
+        lead.get_by_role("link", name="Course library").click()
+        expect(lead.get_by_role("list", name="Courses").get_by_text(course_title)).to_be_visible()
+
+    step("programs: a Team Lead adds an external course, with https enforced", add_course)
+
+    def quick_setup():
+        lead.goto(f"{APP}/learning?tab=programs")
+        lead.get_by_role("button", name="Learn then build").click()
+        dialog = lead.get_by_role("dialog", name="Learn then build")
+        dialog.get_by_label("Track title").fill(track_title)
+        dialog.get_by_role("button", name="Create track").click()
+        expect(dialog.get_by_text("Choose at least one course to learn from.")).to_be_visible()
+        expect(dialog.get_by_text("Name at least 2 skills, separated by commas.")).to_be_visible()
+        expect(dialog.get_by_text("Say what they should hand in.")).to_be_visible()
+        dialog.get_by_label(f"{course_title} (Vercel)").check()
+        dialog.get_by_label("What to build").fill("A small shop with a cart.")
+        dialog.get_by_label("Deliverables").fill("A code link and a live link.")
+        dialog.get_by_label("Builds").select_option("TEAM")
+        dialog.get_by_label("Skills").fill(f"Next.js {RUN}, Teamwork {RUN}")
+        expect(dialog.get_by_label("Unlock the build only once the learning is done")).to_be_checked()
+        dialog.get_by_role("button", name="Create track").click()
+        expect(lead.get_by_text(f"{track_title} is ready. Now choose who's on it.")).to_be_visible()
+
+        program = lead.get_by_role("dialog", name="New program")
+        expect(program.get_by_label("Track")).to_have_value(re.compile("[0-9a-f-]{36}"))
+        state["track"] = program.get_by_label("Track").input_value()
+        expect(program.get_by_label("Builds")).to_have_value("TEAM")
+        program.get_by_label("Name").fill(program_name)
+        for person in (ada, ben):
+            pick_assignee(program, person["name"], "Learners")
+        program.get_by_label("Mentor").select_option(lead_user["id"])
+        program.get_by_role("button", name="Start program").click()
+        expect(lead.get_by_text(f"{program_name} has started with 2 learners.")).to_be_visible()
+        expect(lead).to_have_url(re.compile(r"/learning/programs/[0-9a-f-]{36}$"))
+        state["program"] = lead.url.rsplit("/", 1)[1]
+        expect(lead.get_by_role("heading", name=program_name)).to_be_visible()
+        expect(lead.get_by_text("Team build", exact=False).first).to_be_visible()
+        rows = lead.get_by_role("table", name="Learners in this program").locator("tbody tr")
+        expect(rows).to_have_count(2)
+        expect(rows.filter(has_text=ada["name"])).to_contain_text("Locked")
+
+    step("programs: Learn then build makes a published track, then starts a team program on it", quick_setup)
+
+    def builder_shows_types():
+        lead.goto(f"{APP}/learning/tracks/{state['track']}")
+        expect(lead.get_by_role("heading", name=track_title)).to_be_visible()
+        rows = lead.locator(".track-item")
+        expect(rows.filter(has_text=course_title)).to_contain_text("Course")
+        expect(rows.filter(has_text="Build").first).to_be_visible()
+        expect(lead.get_by_label("Lock builds until the learning before them is done")).to_be_checked()
+
+        card = lead.locator(".card", has=lead.get_by_role("button", name=re.compile("^Rename Learn")))
+        card.get_by_role("button", name="Add item").click()
+        panel = lead.get_by_role("dialog", name="New item")
+        panel.get_by_label("Type").select_option("COURSE")
+        panel.get_by_role("button", name="Add item").click()
+        expect(panel.get_by_text("Choose a course.")).to_be_visible()
+        panel.get_by_role("button", name="Close").click()
+
+        card.get_by_role("button", name="Add item").click()
+        panel = lead.get_by_role("dialog", name="New item")
+        panel.get_by_label("Type").select_option("BUILD")
+        expect(panel.get_by_label(re.compile("^What to build"))).to_be_visible()
+        expect(panel.get_by_label("Builds")).to_be_visible()
+        panel.get_by_role("button", name="Close").click()
+
+    step("programs: the track builder shows course and build items, and the build lock", builder_shows_types)
+
+    def build_locked():
+        learner.goto(f"{APP}/learning")
+        tabs = learner.get_by_role("tablist", name="Learning views")
+        expect(tabs.get_by_role("tab", name="Programs")).to_be_visible()
+        learner.get_by_role("link", name=re.compile(re.escape(track_title))).first.click()
+        build = learner.locator("li", has_text="Unlocks after the learning")
+        expect(build).to_have_count(1)
+        build.get_by_role("button").click()
+        panel = learner.get_by_role("dialog")
+        expect(panel.get_by_text("This build unlocks once the learning before it is done.")).to_be_visible()
+        expect(panel.get_by_label("Code link")).to_have_count(0)
+        panel.get_by_role("button", name="Close").click()
+        state["enrollment"] = learner.url.rsplit("/", 1)[1]
+
+    step("programs: the build stays locked until the learning is done", build_locked)
+
+    def send_proof():
+        learner.goto(f"{APP}/learning/courses/{state['course']}")
+        expect(learner.get_by_role("heading", name=course_title)).to_be_visible()
+        learner.get_by_role("button", name="Start course").click()
+        expect(learner.get_by_text("In progress", exact=True)).to_be_visible()
+        learner.get_by_role("button", name="Send for review").click()
+        expect(learner.get_by_text("Add the link to your certificate.")).to_be_visible()
+        learner.get_by_label("Certificate link").fill("http://example.test/cert")
+        learner.get_by_role("button", name="Send for review").click()
+        expect(learner.get_by_text("Use a full https link.")).to_be_visible()
+        learner.get_by_label("Certificate link").fill("https://example.test/cert/ada")
+        learner.get_by_role("button", name="Send for review").click()
+        expect(learner.get_by_text("Sent for review.")).to_be_visible()
+        expect(learner.get_by_text("Waiting for review", exact=True).first).to_be_visible()
+
+    step("programs: a learner starts the course and sends a certificate link", send_proof)
+
+    def review_proof():
+        lead.goto(f"{APP}/learning?tab=reviews")
+        entry = lead.get_by_role("button", name=re.compile(re.escape(course_title)))
+        expect(entry).to_contain_text("Course proof · Vercel")
+        entry.click()
+        panel = lead.get_by_role("dialog")
+        expect(panel.get_by_role("heading", name=course_title)).to_be_visible()
+        expect(panel.get_by_role("link", name="https://example.test/cert/ada")).to_be_visible()
+        panel.get_by_role("button", name="Request changes").click()
+        expect(panel.get_by_text(re.compile("note", re.I)).first).to_be_visible()
+        panel.get_by_label(re.compile("^Note")).fill("That link is to someone else's certificate.")
+        panel.get_by_role("button", name="Request changes").click()
+        expect(lead.get_by_text("Changes requested.")).to_be_visible()
+
+        learner.reload()
+        expect(learner.get_by_text("That link is to someone else's certificate.")).to_be_visible()
+        learner.get_by_label("Certificate link").fill("https://example.test/cert/ada-2")
+        learner.get_by_role("button", name="Send again").click()
+        expect(learner.get_by_text("Sent for review.")).to_be_visible()
+
+        lead.reload()
+        lead.get_by_role("button", name=re.compile(re.escape(course_title))).click()
+        lead.get_by_role("dialog").get_by_role("button", name="Approve").click()
+        expect(lead.get_by_text("Course approved.")).to_be_visible()
+        learner.reload()
+        expect(learner.get_by_text("Done", exact=True)).to_be_visible()
+
+    step("programs: the mentor asks for changes with a note, then approves the course", review_proof)
+
+    def team_build():
+        learner.goto(f"{APP}/learning/enrollments/{state['enrollment']}")
+        expect(learner.locator("li", has_text="Unlocks after the learning")).to_have_count(0)
+        learner.locator("li", has_text="Build").get_by_role("button").first.click()
+        panel = learner.get_by_role("dialog")
+        expect(panel.get_by_text("A small shop with a cart.")).to_be_visible()
+        expect(panel.get_by_text("One submission counts for the whole team.")).to_be_visible()
+        panel.get_by_role("button", name="Send the build").click()
+        expect(panel.get_by_text("Add the link to the code.")).to_be_visible()
+        panel.get_by_label("Code link").fill("https://github.com/example/shop")
+        panel.get_by_label(re.compile("^Live link")).fill("http://shop.example.test")
+        panel.get_by_role("button", name="Send the build").click()
+        expect(panel.get_by_text("Use a full https link.")).to_be_visible()
+        panel.get_by_label(re.compile("^Live link")).fill("https://shop.example.test")
+        panel.get_by_role("button", name="Send the build").click()
+        expect(learner.get_by_text("Sent for the whole team.")).to_be_visible()
+
+        lead.goto(f"{APP}/learning/programs/{state['program']}")
+        rows = lead.get_by_role("table", name="Learners in this program").locator("tbody tr")
+        expect(rows.filter(has_text=ada["name"])).to_contain_text("Unlocked")
+        expect(rows.filter(has_text=ben["name"])).to_contain_text("Locked")
+        expect(lead.get_by_text(f"Sent by {ada['name']}")).to_be_visible()
+        expect(lead.get_by_role("link", name="https://github.com/example/shop")).to_be_visible()
+
+    step("programs: one learner sends the team build, and the program page shows it", team_build)
+
+    def review_team_build():
+        lead.goto(f"{APP}/learning?tab=reviews")
+        entry = lead.get_by_role("button", name=re.compile("Team build"))
+        expect(entry).to_be_visible()
+        entry.click()
+        panel = lead.get_by_role("dialog")
+        panel.get_by_role("group", name="Score", exact=True).get_by_role("button", name="4 out of 5").click()
+        panel.get_by_role("group", name=f"Score for {ada['name']}").get_by_role("button", name="5 out of 5").click()
+        panel.get_by_label(f"Note for {ada['name']}").fill("Led the cart work.")
+        with lead.expect_request(lambda r: r.method == "POST" and "/review" in r.url) as sent:
+            panel.get_by_role("button", name="Approve").click()
+        body = sent.value.post_data_json
+        assert body["memberReviews"] == [{"learnerId": ada["id"], "score": 5, "note": "Led the cart work."}], body
+
+        learner.reload()
+        learner.locator("li", has_text="Build").get_by_role("button").first.click()
+        panel = learner.get_by_role("dialog")
+        expect(panel.get_by_text("Led the cart work.", exact=False)).to_be_visible()
+        expect(panel.get_by_text(f"Sent by {ada['name']} for the team", exact=False)).to_be_visible()
+
+    step("programs: a team build is reviewed with a score and note for one person", review_team_build)
+
+    def youtube_progress():
+        course = call("POST", "/learning/courses", lead_token, {
+            "title": f"{PREFIX} Watch here",
+            "provider": "YouTube",
+            "format": "YOUTUBE",
+            "url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+            "youtubeUrls": ["https://www.youtube.com/watch?v=dQw4w9WgXcQ"],
+            "level": "BEGINNER",
+        })["course"]
+        page = new_page(browser)
+        log_in_as(page, ben["email"], ben["password"])
+        page.route("https://www.youtube.com/iframe_api", lambda route: route.fulfill(content_type="text/javascript", body=YT_FAKE))
+        page.goto(f"{APP}/learning/courses/{course['id']}")
+        page.get_by_role("button", name="Start course").click()
+        expect(page.get_by_role("region", name=re.compile("^Video:"))).to_be_visible()
+        page.wait_for_function("window.__players && window.__players.length === 1")
+        expect(page.get_by_role("img", name="0% watched")).to_be_visible()
+        page.evaluate("window.__players[0].fire(YT.PlayerState.PLAYING, 0)")
+        with page.expect_response(lambda r: r.request.method == "POST" and "/videos/" in r.url) as sent:
+            page.evaluate("window.__players[0].fire(YT.PlayerState.PAUSED, 120)")
+        assert sent.value.request.post_data_json == {"watchedSeconds": 120, "durationSeconds": 120}, sent.value.request.post_data_json
+        # The server only credits what could have played since the last report: 30 seconds at first.
+        expect(page.get_by_role("img", name="25% watched")).to_be_visible()
+        # A second report inside 10 seconds is refused with 429, which the page ignores.
+        with page.expect_response(lambda r: r.request.method == "POST" and "/videos/" in r.url) as again:
+            page.evaluate("window.__players[0].fire(YT.PlayerState.ENDED, 120)")
+        assert again.value.status == 429, again.value.status
+        page.wait_for_timeout(500)
+        expect(page.locator(".toast, [role=alert]").filter(has_text=re.compile("10 seconds|went wrong"))).to_have_count(0)
+        expect(page.get_by_role("img", name="25% watched")).to_be_visible()
+        page.context.close()
+
+    step("programs: a YouTube course reports watching, capped by the server, and ignores 429", youtube_progress)
+
+    lead.context.close()
+    learner.context.close()
+    for person in (ada, ben):
+        call("POST", f"/users/{person['id']}/deactivate", admin_token)
 
 
 def run_departments(browser, admin_token):

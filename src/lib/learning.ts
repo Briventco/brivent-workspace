@@ -1,4 +1,5 @@
-import { Enrollment, ItemStatus, LearningHealth, Track } from '../api/types';
+import { Enrollment, ItemStatus, LearningHealth, Track, TrackItemType } from '../api/types';
+import type { IconName } from '../components/ui/iconNames';
 import { formatDayMonth, watDayStart } from './wat';
 
 export const HEALTH_LABELS: Record<LearningHealth, string> = {
@@ -16,6 +17,20 @@ export const ITEM_STATUS_LABELS: Record<ItemStatus, string> = {
 };
 
 /** Never through a browser timezone: these are West Africa Time calendar days. */
+export const ITEM_TYPE_LABELS: Record<TrackItemType, string> = {
+  RESOURCE: 'Resource',
+  ASSIGNMENT: 'Assignment',
+  COURSE: 'Course',
+  BUILD: 'Build',
+};
+
+export const ITEM_TYPE_ICONS: Record<TrackItemType, IconName> = {
+  RESOURCE: 'description',
+  ASSIGNMENT: 'edit_note',
+  COURSE: 'menu_book',
+  BUILD: 'code',
+};
+
 export const formatDay = (date: string) => formatDayMonth(watDayStart(date), false);
 
 export const dueText = (date: string | null) => (date ? `Due ${formatDay(date)}` : 'No due date');

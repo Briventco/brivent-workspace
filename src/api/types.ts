@@ -300,7 +300,12 @@ export interface Message {
 }
 
 export type TrackStatus = 'DRAFT' | 'PUBLISHED' | 'ARCHIVED';
-export type TrackItemType = 'RESOURCE' | 'ASSIGNMENT';
+export type TrackItemType = 'RESOURCE' | 'ASSIGNMENT' | 'COURSE' | 'BUILD';
+export type SubmissionMode = 'INDIVIDUAL' | 'TEAM';
+export type CourseLevel = 'BEGINNER' | 'INTERMEDIATE' | 'ADVANCED';
+export type CourseFormat = 'EXTERNAL' | 'YOUTUBE';
+export type ProofType = 'CERTIFICATE_LINK' | 'LINK_OR_SCREENSHOT' | 'MENTOR_CHECK';
+export type CourseStatus = 'NOT_STARTED' | 'IN_PROGRESS' | 'PROOF_SUBMITTED' | 'CHANGES_REQUESTED' | 'COMPLETED';
 export type EnrollmentStatus = 'ACTIVE' | 'PAUSED' | 'COMPLETED' | 'WITHDRAWN';
 export type LearningHealth = 'ON_TRACK' | 'BEHIND' | 'COMPLETED' | 'PAUSED';
 export type SkillTrend = 'UP' | 'DOWN' | 'FLAT' | 'NONE';
@@ -331,6 +336,15 @@ export interface TrackItem {
   sortOrder: number;
   isArchived: boolean;
   skillIds: string[];
+  /** COURSE items: the library course it follows. */
+  courseId: string | null;
+  course: CourseSummary | null;
+  /** BUILD items: what to build, and where. */
+  projectId: string | null;
+  project: Named | null;
+  brief: string;
+  deliverables: string;
+  submissionMode: SubmissionMode | null;
 }
 
 export interface TrackModule {
@@ -353,6 +367,8 @@ export interface Track {
   modules: TrackModule[];
   createdAt: string;
   updatedAt: string;
+  /** A BUILD item stays locked until every learning item before it is done. */
+  lockBuildUntilLearningDone: boolean;
 }
 
 export interface NextItem {
@@ -389,11 +405,16 @@ export interface EnrollmentProgress {
   lastActivityAt: string | null;
   nextItem: NextItem | null;
   skills: SkillProgress[];
+  /** Every non-BUILD item is complete. */
+  learningDone: boolean;
+  buildUnlocked: boolean;
 }
 
 export interface Enrollment {
   id: string;
   track: { id: string; title: string };
+  /** Set when the enrollment is part of a program. */
+  cohort: { id: string; name: string; submissionMode: SubmissionMode } | null;
   learner: Named & { position: Named | null };
   mentor: Named;
   /** WAT calendar dates. */
@@ -417,9 +438,17 @@ export interface Submission {
   feedback: string | null;
   score: number | null;
   reviewedBy: Named | null;
+  /** BUILD items. */
+  repoUrl: string | null;
+  liveUrl: string | null;
+  isTeamSubmission: boolean;
+  submittedBy: Named | null;
+  /** Per-person feedback on a team build. Each learner sees only their own. */
+  memberReviews: { learner: Named; score: number | null; note: string | null }[];
 }
 
 export interface ReviewRequest extends Submission {
+  kind: 'ASSIGNMENT' | 'BUILD';
   item: { id: string; title: string };
   track: { id: string; title: string };
   learner: Named;
@@ -433,6 +462,10 @@ export interface EnrollmentItem extends TrackItem {
   /** How many times it's been submitted. The API only sends the latest one. */
   attempts: number;
   latestSubmission: Submission | null;
+  /** COURSE items: the exact course status, where `status` simplifies it. */
+  courseStatus: CourseStatus | null;
+  /** BUILD items wait until the learning before them is done. */
+  isLocked: boolean;
 }
 
 export interface EnrollmentModule {
@@ -454,4 +487,81 @@ export interface SkillRating {
   note: string | null;
   createdAt: string;
   ratedBy: Named;
+}
+
+export interface CourseSummary {
+  id: string;
+  title: string;
+  provider: string;
+  url: string;
+  format: CourseFormat;
+  proofType: ProofType;
+  youtubeVideoIds: string[];
+  isArchived: boolean;
+}
+
+export interface Course extends CourseSummary {
+  description: string;
+  topics: string[];
+  level: CourseLevel;
+  estimatedHours: number | null;
+  isFree: boolean;
+  department: Named | null;
+  addedBy: Named;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CourseVideo {
+  videoId: string;
+  watchedSeconds: number;
+  durationSeconds: number | null;
+  completedAt: string | null;
+}
+
+/** One per person per course, shared by every track and program that includes it. */
+export interface CourseProgress {
+  learner: Named;
+  course: CourseSummary;
+  status: CourseStatus;
+  startedAt: string | null;
+  completedAt: string | null;
+  proofLink: string | null;
+  proofNote: string | null;
+  /** Signed for an hour, and only for the learner and their reviewers. */
+  proofImageUrl: string | null;
+  proofSubmittedAt: string | null;
+  reviewedBy: Named | null;
+  reviewedAt: string | null;
+  reviewNote: string | null;
+  videos: CourseVideo[];
+}
+
+export interface CourseProofRequest extends CourseProgress {
+  kind: 'COURSE_PROOF';
+  submittedAt: string;
+}
+
+export type ReviewQueueEntry = ReviewRequest | CourseProofRequest;
+
+export interface CohortLearner {
+  enrollmentId: string;
+  learner: Named;
+  status: EnrollmentStatus;
+  progress: EnrollmentProgress;
+}
+
+/** A program: one track run for a group, alone or as a team. */
+export interface Cohort {
+  id: string;
+  name: string;
+  track: { id: string; title: string };
+  mentor: Named;
+  project: Named | null;
+  startDate: string;
+  submissionMode: SubmissionMode;
+  createdAt: string;
+  learners: CohortLearner[];
+  /** On a single cohort in TEAM mode: the latest submission of each BUILD item. */
+  teamSubmissions?: { item: { id: string; title: string }; submission: Submission }[];
 }

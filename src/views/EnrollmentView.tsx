@@ -23,7 +23,7 @@ import { ConfirmDialog } from '../components/ui/ConfirmDialog';
 import { Icon } from '../components/ui/Icon';
 import { useSession } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
-import { dueText, formatDay } from '../lib/learning';
+import { dueText, formatDay, ITEM_TYPE_ICONS, ITEM_TYPE_LABELS } from '../lib/learning';
 import { Link } from '../lib/router';
 import { useDetailTitle } from '../lib/pageTitle';
 import { useApiQuery } from '../lib/useApiQuery';
@@ -36,14 +36,16 @@ const ItemRow: React.FC<{ item: EnrollmentItem; onOpen: () => void }> = ({ item,
       className="w-full flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-3 text-left bg-transparent border-0 cursor-pointer text-text hover:bg-surface-2"
     >
       <Icon
-        name={item.type === 'RESOURCE' ? 'description' : 'edit_note'}
+        name={item.isLocked ? 'lock' : ITEM_TYPE_ICONS[item.type]}
         size="sm"
         className="text-text-2"
       />
       <span className="min-w-0 grow basis-40">
         <span className="block font-semibold">{item.title}</span>
         <span className={`block text-small ${item.isOverdue ? 'overdue' : 'text-text-2'}`}>
-          {item.type === 'RESOURCE' ? 'Resource' : 'Assignment'} · {dueText(item.dueDate)}
+          {ITEM_TYPE_LABELS[item.type]}
+          {item.type === 'COURSE' && item.course ? ` · ${item.course.provider}` : ` · ${dueText(item.dueDate)}`}
+          {item.isLocked && ' · Unlocks after the learning'}
           {item.isOverdue && ' · Overdue'}
         </span>
       </span>
