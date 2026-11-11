@@ -213,6 +213,8 @@ interface ItemPanelProps {
   canReview: boolean;
   onClose: () => void;
   onChanged: () => void;
+  /** Marks a resource done straight away, leaving the parent to confirm or roll back. */
+  onMarkDone?: () => void;
 }
 
 export const ItemPanel: React.FC<ItemPanelProps> = ({
@@ -222,6 +224,7 @@ export const ItemPanel: React.FC<ItemPanelProps> = ({
   canReview,
   onClose,
   onChanged,
+  onMarkDone,
 }) => {
   const toast = useToast();
   const [isCompleting, setIsCompleting] = useState(false);
@@ -230,6 +233,10 @@ export const ItemPanel: React.FC<ItemPanelProps> = ({
   const isResource = type === 'RESOURCE';
 
   const markDone = async () => {
+    if (onMarkDone) {
+      onMarkDone();
+      return;
+    }
     setIsCompleting(true);
     try {
       await completeResource(enrollment.id, item.id);

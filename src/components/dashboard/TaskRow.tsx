@@ -52,13 +52,45 @@ interface TaskRowProps {
   task: Task;
   /** On a project's page the project goes without saying, and who has it matters more. */
   showAssignee?: boolean;
+  /**
+   * Title on its own line with status and deadline underneath, for narrow cards where a side by
+   * side row would squeeze the title into a column a word wide.
+   */
+  stacked?: boolean;
+  /** Adds priority to the stacked line, where it matters, like a project's task list. */
+  showPriority?: boolean;
 }
 
-export const TaskRow: React.FC<TaskRowProps> = ({ task, showAssignee = false }) => {
+export const TaskRow: React.FC<TaskRowProps> = ({
+  task,
+  showAssignee = false,
+  stacked = false,
+  showPriority = false,
+}) => {
   const { user } = useSession();
   const line = subtitle(task, user.id);
   // Your own list doesn't need your name, but a task you share should say so.
   const showPeople = showAssignee || task.assignees.length > 1;
+
+  if (stacked) {
+    return (
+      <li>
+        <Link to={`/tasks/${task.id}`} className="li block text-text hover:no-underline">
+          <span className="title block line-clamp-2 break-words">{task.title}</span>
+          <span className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-small">
+            <StatusBadge status={task.status} />
+            {showPriority && <PriorityBadge priority={task.priority} />}
+            <DeadlineLabel task={task} />
+            {showPeople && task.assignees.length > 0 && (
+              <span className="ml-auto">
+                <AssigneeStack people={task.assignees} size="xs" />
+              </span>
+            )}
+          </span>
+        </Link>
+      </li>
+    );
+  }
 
   return (
     <li>

@@ -8,8 +8,12 @@ const count = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
 
 /** Live from the socket, and only once the summary shows the backend sends these counts. */
 export const UnreadMessagesLink: React.FC<{ summary: TaskSummary }> = ({ summary }) => {
-  const { unread } = useRealtime();
-  if (summary.unreadMessages === undefined || (!unread.messages && !unread.mentions)) return null;
+  const { unread: live } = useRealtime();
+  if (summary.unreadMessages === undefined) return null;
+  // The summary is ready with the page, so the line is in place from the first paint. The socket's
+  // count only replaces it once it has arrived, rather than starting from zero.
+  const unread = live ?? { messages: summary.unreadMessages, mentions: summary.unreadMentions ?? 0 };
+  if (!unread.messages && !unread.mentions) return null;
 
   const facts = [
     unread.messages > 0 && `${count(unread.messages, 'unread message')}`,

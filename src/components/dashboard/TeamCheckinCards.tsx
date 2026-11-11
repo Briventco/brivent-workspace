@@ -113,8 +113,12 @@ export const NotCheckedInCard: React.FC<{ query: ApiQuery<TeamCheckins> }> = ({ 
           {notCheckedIn.map((person) => (
             <li key={person.id} className="li">
               <Avatar name={person.name} id={person.id} />
-              <span className="min-w-0 grow title truncate">{person.name}</span>
-              <span className="text-small text-text-2 truncate">{personTitle(person)}</span>
+              <span className="min-w-0 grow">
+                <span className="title block truncate">{person.name}</span>
+                {personTitle(person) && (
+                  <span className="block text-small text-text-2 truncate">{personTitle(person)}</span>
+                )}
+              </span>
             </li>
           ))}
         </ul>

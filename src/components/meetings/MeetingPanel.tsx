@@ -184,13 +184,15 @@ export const MeetingPanel: React.FC<MeetingPanelProps> = ({
 
   const answer = async (response: Rsvp) => {
     if (!meeting || response === 'PENDING') return;
+    const previous = meeting;
     setIsAnswering(true);
+    setMeeting({ ...meeting, myRsvp: response });
     try {
       setMeeting(await answerMeeting(meeting.id, response));
       onChanged();
     } catch (error) {
-      toast.error(errorMessage(error));
-      query.reload();
+      setMeeting(previous);
+      toast.error(`${errorMessage(error)} Your answer hasn't changed.`);
     } finally {
       setIsAnswering(false);
     }

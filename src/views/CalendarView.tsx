@@ -63,6 +63,7 @@ export const CalendarView: React.FC = () => {
   const query = useApiQuery(
     (signal) => listMeetings(monday, sunday, scope, signal),
     [monday, sunday, scope],
+    'meetings:week',
   );
   const deadlines = useApiQuery(
     async (signal) => {

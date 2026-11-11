@@ -20,6 +20,7 @@ import { Button } from '../components/ui/Button';
 import { ConfirmDialog } from '../components/ui/ConfirmDialog';
 import { EmptyState } from '../components/ui/EmptyState';
 import { PageHeader } from '../components/ui/PageHeader';
+import { Menu, MenuItem } from '../components/ui/Menu';
 import { Pagination } from '../components/ui/Pagination';
 import { Table, TableRow } from '../components/ui/Table';
 import { AddUserModal } from '../components/users/AddUserModal';
@@ -50,8 +51,9 @@ export const UsersView: React.FC = () => {
         ? listUsersWithoutDepartment(signal).then((users) => ({ users, total: users.length }))
         : listUsers(page, department, signal),
     [page, department],
+    'users',
   );
-  const departments = useApiQuery((signal) => listDepartments(signal), []);
+  const departments = useApiQuery((signal) => listDepartments(signal), [], 'departments');
   const departmentFilter = [
     { value: '', label: 'All departments' },
     { value: NO_DEPARTMENT, label: 'Active, no department' },
@@ -81,6 +83,28 @@ export const UsersView: React.FC = () => {
   const canManage = (user: User) => user.role !== 'SUPER_ADMIN' || canAssignSuperAdmin;
 
   const isDeactivating = statusTarget?.status !== 'DEACTIVATED';
+
+  /** What sits behind "...". Resend and Reactivate stay visible as buttons, as the design shows. */
+  const menuFor = (user: User): MenuItem[] => {
+    const isSelf = user.id === currentUser.id;
+    const items: MenuItem[] = [];
+    if (canUpdate && canManage(user)) {
+      items.push({ label: 'Edit', icon: 'edit', onSelect: () => setEditing(user) });
+    }
+    if (canResetPassword && !isSelf && user.status === 'ACTIVE') {
+      items.push({ label: 'Reset password', icon: 'lock_reset', onSelect: () => setResetTarget(user) });
+    }
+    if (canDeactivate && canManage(user) && !isSelf && user.status !== 'DEACTIVATED') {
+      items.push({
+        label: 'Deactivate',
+        icon: 'person_off',
+        tone: 'danger',
+        separated: items.length > 0,
+        onSelect: () => setStatusTarget(user),
+      });
+    }
+    return items;
+  };
 
   const handleStatusChange = async () => {
     if (!statusTarget) return;
@@ -175,11 +199,10 @@ export const UsersView: React.FC = () => {
       >
         {({ users, total }) => (
           <div className="card overflow-hidden">
-            <Table caption="Workspace users">
+            <Table caption="Workspace users" className="table-pin-first">
               <thead>
                 <tr>
                   <th scope="col">Name</th>
-                  <th scope="col">Department</th>
                   <th scope="col">Position</th>
                   <th scope="col">Access level</th>
                   <th scope="col">Status</th>
@@ -197,7 +220,7 @@ export const UsersView: React.FC = () => {
                   return (
                     <TableRow key={user.id}>
                       <td>
-                        <div className="flex items-center gap-3 min-w-[14rem]">
+                        <div className="flex items-center gap-3 w-[15rem] max-w-[60vw]">
                           <Avatar name={user.fullName} id={user.id} />
                           <div className="min-w-0">
                             <p className="font-semibold truncate">
@@ -208,13 +231,20 @@ export const UsersView: React.FC = () => {
                           </div>
                         </div>
                       </td>
-                      <td className="text-text-2">{user.department?.name ?? 'Not set'}</td>
-                      <td className="text-text-2">{user.position?.name ?? 'Not set'}</td>
+                      <td>
+                        {/* What someone does, with where they sit underneath, as one column. */}
+                        <span className="block truncate max-w-[13rem]">
+                          {user.position?.name ?? 'No position'}
+                        </span>
+                        <span className="block truncate max-w-[13rem] text-small text-text-2">
+                          {user.department?.name ?? 'No department'}
+                        </span>
+                      </td>
                       <td>
                         <RoleBadge role={user.role} />
                       </td>
                       <td>
-                        <div className="flex flex-col items-start gap-1">
+                        <div className="flex flex-col items-start gap-1 whitespace-nowrap">
                           <UserStatusBadge status={user.status} />
                           {isActive && user.mustChangePassword && (
                             <span className="text-caption text-text-3 whitespace-nowrap">
@@ -227,57 +257,30 @@ export const UsersView: React.FC = () => {
                         {format(new Date(user.createdAt), 'd MMM yyyy')}
                       </td>
                       <td>
-                        <div className="flex items-center justify-end gap-1">
-                          {canUpdate && canManage(user) && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              icon="edit"
-                              onClick={() => setEditing(user)}
-                              aria-label={`Edit ${user.fullName}`}
-                              title={`Edit ${user.fullName}`}
-                            >
-                              <span className="hidden 2xl:inline">Edit</span>
-                            </Button>
-                          )}
+                        <div className="flex items-center justify-end gap-1 whitespace-nowrap">
                           {canResendInvite && user.status === 'PENDING' && (
                             <Button
-                              variant="ghost"
+                              variant="secondary"
                               size="sm"
-                              icon="forward_to_inbox"
                               onClick={() => handleResend(user)}
                               isLoading={resendingId === user.id}
                               aria-label={`Resend invite to ${user.fullName}`}
-                              title={`Resend invite to ${user.fullName}`}
                             >
-                              <span className="hidden 2xl:inline">Resend invite</span>
+                              Resend
                             </Button>
                           )}
-                          {canResetPassword && !isSelf && isActive && (
+                          {canDeactivate && canManage(user) && !isSelf && isDeactivated && (
                             <Button
-                              variant="ghost"
+                              variant="secondary"
                               size="sm"
-                              icon="lock_reset"
-                              onClick={() => setResetTarget(user)}
-                              aria-label={`Reset password for ${user.fullName}`}
-                              title={`Reset password for ${user.fullName}`}
-                            >
-                              <span className="hidden 2xl:inline">Reset password</span>
-                            </Button>
-                          )}
-                          {canDeactivate && canManage(user) && !isSelf && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              icon={isDeactivated ? 'person_check' : 'person_off'}
                               onClick={() => setStatusTarget(user)}
-                              aria-label={`${isDeactivated ? 'Reactivate' : 'Deactivate'} ${user.fullName}`}
-                              title={`${isDeactivated ? 'Reactivate' : 'Deactivate'} ${user.fullName}`}
+                              aria-label={`Reactivate ${user.fullName}`}
                             >
-                              <span className="hidden 2xl:inline">
-                                {isDeactivated ? 'Reactivate' : 'Deactivate'}
-                              </span>
+                              Reactivate
                             </Button>
+                          )}
+                          {menuFor(user).length > 0 && (
+                            <Menu label={`Actions for ${user.fullName}`} items={menuFor(user)} />
                           )}
                         </div>
                       </td>

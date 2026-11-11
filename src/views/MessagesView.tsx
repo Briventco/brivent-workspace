@@ -29,6 +29,7 @@ import { useSession } from '../context/AuthContext';
 import { PendingMessage, RealtimeEvent, useRealtime } from '../context/RealtimeContext';
 import { useToast } from '../context/ToastContext';
 import { conversationTitle, EMPTY_DRAFT } from '../lib/messages';
+import { useDetailTitle } from '../lib/pageTitle';
 import { navigate } from '../lib/router';
 import { useApiQuery } from '../lib/useApiQuery';
 import { useConversations } from '../lib/useConversations';
@@ -59,6 +60,7 @@ export const MessagesView: React.FC<{ conversationId?: string }> = ({ conversati
   const browsed = needsBrowse && browse.data?.conversationId === conversationId ? browse.data : null;
   const preview = browsed?.channels.find(({ id }) => id === conversationId);
   const open = mine ?? preview;
+  useDetailTitle(open ? conversationTitle(open) : null);
 
   const thread = useThread(open ? conversationId : null);
 
@@ -140,15 +142,22 @@ export const MessagesView: React.FC<{ conversationId?: string }> = ({ conversati
     (messageId: string) => {
       if (!conversationId || lastRead.current.get(conversationId) === messageId) return;
       lastRead.current.set(conversationId, messageId);
+      const before = conversations.data?.find(({ id }) => id === conversationId);
+      patch(conversationId, { unreadCount: 0, mentionCount: 0 });
       markRead(conversationId, messageId).then(
+        () => conversations.reload(),
         () => {
-          patch(conversationId, { unreadCount: 0, mentionCount: 0 });
-          conversations.reload();
+          lastRead.current.delete(conversationId);
+          if (before) {
+            patch(conversationId, {
+              unreadCount: before.unreadCount,
+              mentionCount: before.mentionCount,
+            });
+          }
         },
-        () => lastRead.current.delete(conversationId),
       );
     },
-    [conversationId, patch, conversations.reload],
+    [conversationId, patch, conversations.reload, conversations.data],
   );
 
   const edit = async (message: Message, body: string) => {

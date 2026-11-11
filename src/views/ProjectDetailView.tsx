@@ -26,6 +26,7 @@ import { useToast } from '../context/ToastContext';
 import { nameAndTitle, personTitle } from '../lib/people';
 import { isAssignee } from '../lib/tasks';
 import { Link, navigate } from '../lib/router';
+import { useDetailTitle } from '../lib/pageTitle';
 import { ApiQuery, useApiQuery } from '../lib/useApiQuery';
 import { daysBetween, formatDayMonth, formatShortDate, watDayStart, weekStart } from '../lib/wat';
 
@@ -116,7 +117,7 @@ const TasksCard: React.FC<TasksCardProps> = ({ project, query, canCreate, onNewT
           <>
             <ul className="divide-y divide-border">
               {visible.map((task) => (
-                <TaskRow key={task.id} task={task} showAssignee />
+                <TaskRow key={task.id} task={task} showAssignee stacked showPriority />
               ))}
             </ul>
             {canSeeAll && tasks.length > visible.length && (
@@ -415,7 +416,8 @@ const ProjectPage: React.FC<{ project: Project; onChanged: () => void }> = ({
 };
 
 export const ProjectDetailView: React.FC<{ projectId: string }> = ({ projectId }) => {
-  const query = useApiQuery((signal) => getProject(projectId, signal), [projectId]);
+  const query = useApiQuery((signal) => getProject(projectId, signal), [projectId], 'project');
+  useDetailTitle(query.data?.name);
 
   if (query.error instanceof ApiError && (query.error.status === 404 || query.error.status === 400)) {
     return (

@@ -47,7 +47,8 @@ interface Unread {
 
 interface RealtimeApi {
   isReconnecting: boolean;
-  unread: Unread;
+  /** Null until the first count arrives. */
+  unread: Unread | null;
   /** What a badge shows. A mention in a muted conversation still counts. */
   unreadBadge: number;
   subscribe: (listener: Listener) => () => void;
@@ -65,7 +66,7 @@ const RealtimeContext = createContext<RealtimeApi | undefined>(undefined);
 /** Mounted behind the login, so the socket opens after sign-in and closes on sign-out. */
 export const RealtimeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [isReconnecting, setIsReconnecting] = useState(false);
-  const [unread, setUnread] = useState<Unread>({ messages: 0, mentions: 0 });
+  const [unread, setUnread] = useState<Unread | null>(null);
   const [pending, setPending] = useState<PendingMessage[]>([]);
   const drafts = useRef(new Map<string, Draft>());
   const listeners = useRef(new Set<Listener>());
@@ -165,7 +166,7 @@ export const RealtimeProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     () => ({
       isReconnecting,
       unread,
-      unreadBadge: Math.max(unread.messages, unread.mentions),
+      unreadBadge: unread ? Math.max(unread.messages, unread.mentions) : 0,
       subscribe,
       pending,
       setPending,

@@ -61,6 +61,7 @@ export function useNavSections(): NavSection[] {
     (signal) =>
       canBuild || !can('viewLearning') ? Promise.resolve([]) : listEnrollments('mine', {}, signal),
     [canBuild],
+    'learning:mine:nav',
   );
   const showLearning = canBuild || (enrollments.data?.length ?? 0) > 0;
 

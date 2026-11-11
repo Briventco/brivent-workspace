@@ -1,6 +1,11 @@
 import React, { useState } from 'react';
 import { ApiError, errorMessage } from '../api/client';
-import { getEnrollment, listSkillRatings, setEnrollmentStatus } from '../api/learning';
+import {
+  completeResource,
+  getEnrollment,
+  listSkillRatings,
+  setEnrollmentStatus,
+} from '../api/learning';
 import { EnrollmentDetail, EnrollmentItem, RatingKind } from '../api/types';
 import { ItemPanel } from '../components/learning/ItemPanel';
 import {
@@ -20,6 +25,7 @@ import { useSession } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { dueText, formatDay } from '../lib/learning';
 import { Link } from '../lib/router';
+import { useDetailTitle } from '../lib/pageTitle';
 import { useApiQuery } from '../lib/useApiQuery';
 
 const ItemRow: React.FC<{ item: EnrollmentItem; onOpen: () => void }> = ({ item, onOpen }) => (
@@ -124,8 +130,13 @@ type StatusAction = 'PAUSED' | 'ACTIVE' | 'WITHDRAWN';
 export const EnrollmentView: React.FC<{ enrollmentId: string }> = ({ enrollmentId }) => {
   const { user, can } = useSession();
   const toast = useToast();
-  const query = useApiQuery((signal) => getEnrollment(enrollmentId, signal), [enrollmentId]);
+  const query = useApiQuery(
+    (signal) => getEnrollment(enrollmentId, signal),
+    [enrollmentId],
+    'learning:enrollment',
+  );
   const enrollment = query.data;
+  useDetailTitle(enrollment?.track.title);
 
   const isLearner = enrollment?.learner.id === user.id;
   const canReview =
@@ -188,6 +199,31 @@ export const EnrollmentView: React.FC<{ enrollmentId: string }> = ({ enrollmentI
   const reload = () => {
     query.reload();
     ratings.reload();
+  };
+
+  const setItemStatus = (itemId: string, itemStatus: EnrollmentItem['status']) =>
+    query.mutate((current) => ({
+      ...current,
+      modules: current.modules.map((module) => ({
+        ...module,
+        items: module.items.map((other) =>
+          other.id === itemId ? { ...other, status: itemStatus } : other,
+        ),
+      })),
+    }));
+
+  /** Ticked at once, with the server's own numbers (progress, health) replacing it after. */
+  const markDone = async (item: EnrollmentItem) => {
+    setOpenItemId(null);
+    setItemStatus(item.id, 'COMPLETED');
+    try {
+      const updated = await completeResource(enrollment.id, item.id);
+      query.mutate(() => updated);
+      toast.success('Marked as done.');
+    } catch (error) {
+      setItemStatus(item.id, item.status);
+      toast.error(`${errorMessage(error)} "${item.title}" isn't marked as done.`);
+    }
   };
 
   return (
@@ -304,6 +340,7 @@ export const EnrollmentView: React.FC<{ enrollmentId: string }> = ({ enrollmentI
             setOpenItemId(null);
             reload();
           }}
+          onMarkDone={() => markDone(openItem)}
         />
       )}
 

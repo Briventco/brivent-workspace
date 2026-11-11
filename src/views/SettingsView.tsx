@@ -35,15 +35,15 @@ export const SettingsView: React.FC = () => {
               <div className="flex items-center gap-4">
                 <Avatar name={user.fullName} id={user.id} size="xl" />
                 <div className="min-w-0">
-                  <p className="t-h2 truncate">{user.fullName}</p>
-                  <p className="mt-1 text-text-2 truncate">{personTitle(user)}</p>
+                  <p className="t-h2 break-words">{user.fullName}</p>
+                  <p className="mt-1 text-text-2 break-words">{personTitle(user)}</p>
                 </div>
               </div>
               <dl className="mt-6 space-y-3">
                 {details.map(({ label, value }) => (
-                  <div key={label} className="flex justify-between gap-4">
+                  <div key={label} className="flex flex-wrap justify-between gap-x-4 gap-y-0.5">
                     <dt className="text-text-2">{label}</dt>
-                    <dd className="font-semibold text-right break-all">{value}</dd>
+                    <dd className="min-w-0 font-semibold text-right break-words">{value}</dd>
                   </div>
                 ))}
               </dl>

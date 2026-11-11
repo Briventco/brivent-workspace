@@ -130,16 +130,25 @@ const TaskResults: React.FC<TaskResultsProps> = ({
       return { tasks: tasks.slice(start, start + TASKS_PAGE_SIZE), total: tasks.length };
     },
     [tab.view, status, priority, overdue, preset, assigneeId, projectId, page],
+    'tasks:list',
   );
+
+  const setStatusOnScreen = (taskId: string, status: TaskStatus) =>
+    query.mutate((current) => ({
+      ...current,
+      tasks: current.tasks.map((other) => (other.id === taskId ? { ...other, status } : other)),
+    }));
 
   const handleStatusChange = async (task: Task, next: TaskStatus) => {
     setBusyTaskId(task.id);
+    setStatusOnScreen(task.id, next);
     try {
       await updateTaskStatus(task.id, next);
       toast.success(`Moved to ${STATUS_LABELS[next]}.`);
       query.reload();
     } catch (error) {
-      toast.error(errorMessage(error));
+      setStatusOnScreen(task.id, task.status);
+      toast.error(`${errorMessage(error)} It's back to ${STATUS_LABELS[task.status]}.`);
     } finally {
       setBusyTaskId(null);
     }
@@ -211,7 +220,7 @@ const TasksScreen: React.FC<{ initial: InitialFilters }> = ({ initial }) => {
   const [preset, setPreset] = useState(initial.preset);
   const [assigneeId, setAssigneeId] = useState(initial.assigneeId);
   const [projectId, setProjectId] = useState(initial.projectId);
-  const projects = useApiQuery((signal) => listAllProjects(signal), []);
+  const projects = useApiQuery((signal) => listAllProjects(signal), [], 'projects');
   const [page, setPage] = useState(1);
 
   const activeTab = tabs.find((tab) => tab.view === view) ?? tabs[0];
